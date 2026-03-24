@@ -5,6 +5,8 @@ export const defaultLightModeLogo = "./appIcon/512.png";
 
 export const defaultTitle = "Nosho CRM";
 
+export const defaultCurrency = "EUR";
+
 export const defaultCompanySectors = [
   { value: "cabinet-liberal", label: "Cabinet libéral" },
   { value: "dentiste-orthodontiste", label: "Dentiste / Orthodontiste" },
@@ -90,6 +92,7 @@ export const defaultTaskTypes = [
 export const defaultConfiguration: ConfigurationContextValue = {
   companySectors: defaultCompanySectors,
   companyTypes: defaultCompanyTypes,
+  currency: defaultCurrency,
   customViews: [],
   dealCategories: defaultDealCategories,
   dealPipelineStatuses: defaultDealPipelineStatuses,
