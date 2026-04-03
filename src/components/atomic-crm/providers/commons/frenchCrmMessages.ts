@@ -206,6 +206,7 @@ export const frenchCrmMessages = {
         amount: "Budget",
         expected_closing_date: "Date de clôture prévue",
         stage: "Étape",
+        sales_id: "Intervenant",
       },
       action: {
         back_to_deal: "Retour à l'affaire",

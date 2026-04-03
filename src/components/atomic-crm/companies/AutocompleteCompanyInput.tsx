@@ -6,7 +6,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 export const AutocompleteCompanyInput = ({
   validate,
   defaultType,
-}: Pick<InputProps, "validate"> & { defaultType?: string }) => {
+  label,
+}: Pick<InputProps, "validate" | "label"> & { defaultType?: string }) => {
   const [create] = useCreate();
   const { identity } = useGetIdentity();
   const notify = useNotify();
@@ -43,6 +44,7 @@ export const AutocompleteCompanyInput = ({
       createLabel="Tapez pour créer une nouvelle société"
       validate={validate}
       modal={isMobile}
+      label={label}
     />
   );
 };
