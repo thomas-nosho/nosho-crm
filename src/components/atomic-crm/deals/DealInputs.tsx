@@ -22,6 +22,7 @@ import { contactOptionText } from "../misc/ContactOption";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import { AutocompleteCompanyInput } from "../companies/AutocompleteCompanyInput.tsx";
 import { DealListViewContext } from "./DealListContent";
+import type { Sale } from "../types";
 
 export const DealInputs = () => {
   const isMobile = useIsMobile();
@@ -136,11 +137,27 @@ const DealLinkedToInputs = ({
   );
 };
 
+const saleOptionRenderer = (choice: Sale) =>
+  `${choice.first_name} ${choice.last_name}`;
+
 const DealMiscInputs = () => {
   const { dealStages, dealCategories } = useConfigurationContext();
   return (
     <div className="flex flex-col gap-4 flex-1">
       <h3 className="text-base font-medium">Divers</h3>
+
+      <ReferenceInput
+        source="sales_id"
+        reference="sales"
+        filter={{ "disabled@neq": true }}
+      >
+        <SelectInput
+          label="Intervenant"
+          helperText={false}
+          optionText={saleOptionRenderer}
+          validate={required()}
+        />
+      </ReferenceInput>
 
       <SelectInput
         source="category"
