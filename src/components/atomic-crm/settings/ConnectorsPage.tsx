@@ -1,10 +1,12 @@
 import { useCallback, useState } from "react";
 import { useDataProvider, useNotify } from "ra-core";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   ExternalLink,
   Loader2,
   LogOut,
+  Pencil,
   Plug,
   ShieldOff,
   Calendar,
@@ -337,10 +339,13 @@ const PreferenceToggle = ({
 const DropcontactConnectorCard = () => {
   const config = useConfigurationContext();
   const updateConfig = useConfigurationUpdater();
+  const dataProvider = useDataProvider<CrmDataProvider>();
+  const queryClient = useQueryClient();
   const notify = useNotify();
 
   const [apiKey, setApiKey] = useState(config.dropcontactApiKey ?? "");
   const [showKey, setShowKey] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const connected = Boolean(config.dropcontactApiKey);
@@ -348,20 +353,35 @@ const DropcontactConnectorCard = () => {
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      updateConfig({ ...config, dropcontactApiKey: apiKey.trim() });
+      const newConfig = { ...config, dropcontactApiKey: apiKey.trim() };
+      await dataProvider.updateConfiguration(newConfig);
+      queryClient.setQueryData(["configuration"], newConfig);
+      updateConfig(newConfig);
+      setEditing(false);
       notify("Clé API Dropcontact enregistrée", { type: "success" });
     } catch {
       notify("Erreur lors de l'enregistrement", { type: "error" });
     } finally {
       setSaving(false);
     }
-  }, [apiKey, config, updateConfig, notify]);
+  }, [apiKey, config, dataProvider, queryClient, updateConfig, notify]);
 
-  const handleDisconnect = useCallback(() => {
-    setApiKey("");
-    updateConfig({ ...config, dropcontactApiKey: undefined });
-    notify("Dropcontact déconnecté");
-  }, [config, updateConfig, notify]);
+  const handleDisconnect = useCallback(async () => {
+    setSaving(true);
+    try {
+      const newConfig = { ...config, dropcontactApiKey: undefined };
+      await dataProvider.updateConfiguration(newConfig);
+      queryClient.setQueryData(["configuration"], newConfig);
+      updateConfig(newConfig);
+      setApiKey("");
+      setEditing(false);
+      notify("Dropcontact déconnecté");
+    } catch {
+      notify("Erreur lors de la déconnexion", { type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  }, [config, dataProvider, queryClient, updateConfig, notify]);
 
   return (
     <Card id="dropcontact">
@@ -418,51 +438,82 @@ const DropcontactConnectorCard = () => {
             <Key className="w-3.5 h-3.5" />
             Clé API
           </Label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Input
-                id="dc-api-key"
-                type={showKey ? "text" : "password"}
-                placeholder="Votre clé API Dropcontact…"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className="pr-9"
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey((v) => !v)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                tabIndex={-1}
+          {connected && !editing ? (
+            <div className="flex gap-2">
+              <div className="flex-1 flex items-center px-3 py-2 rounded-md border bg-muted/40 text-sm font-mono tracking-widest text-muted-foreground">
+                {"••••••••••••" + config.dropcontactApiKey!.slice(-4)}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditing(true)}
               >
-                {showKey ? (
-                  <EyeOff className="w-4 h-4" />
-                ) : (
-                  <Eye className="w-4 h-4" />
-                )}
-              </button>
-            </div>
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={saving || !apiKey.trim()}
-            >
-              {saving ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4" />
-              )}
-            </Button>
-            {connected && (
+                <Pencil className="w-4 h-4" />
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleDisconnect}
+                disabled={saving}
                 className="text-destructive hover:text-destructive"
               >
-                <Trash2 className="w-4 h-4" />
+                {saving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
               </Button>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  id="dc-api-key"
+                  type={showKey ? "text" : "password"}
+                  placeholder="Votre clé API Dropcontact…"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  className="pr-9"
+                  autoFocus={editing}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey((v) => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {showKey ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={saving || !apiKey.trim()}
+              >
+                {saving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+              </Button>
+              {editing && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setApiKey(config.dropcontactApiKey ?? "");
+                    setEditing(false);
+                  }}
+                >
+                  Annuler
+                </Button>
+              )}
+            </div>
+          )}
           <p className="text-xs text-muted-foreground">
             Trouvez votre clé sur{" "}
             <a

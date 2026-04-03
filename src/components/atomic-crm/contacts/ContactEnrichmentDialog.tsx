@@ -51,6 +51,7 @@ export const ContactEnrichmentDialog = () => {
               last_name: record.last_name,
               email: record.email_jsonb?.[0]?.email,
               company_name: record.company_name,
+              linkedin_url: record.linkedin_url,
             },
           },
         },
@@ -147,8 +148,9 @@ export const ContactEnrichmentDialog = () => {
         ) : (
           <div className="flex flex-col gap-4">
             <p className="text-sm text-muted-foreground">
-              Dropcontact va chercher l'email professionnel, le téléphone et le
-              profil LinkedIn de ce contact.
+              {record.linkedin_url
+                ? "LinkedIn disponible — enrichissement précis via profil LinkedIn."
+                : "Dropcontact va chercher l'email professionnel, le téléphone et le profil LinkedIn de ce contact."}
             </p>
 
             <div className="rounded-md border px-3 py-2 text-sm bg-muted/30 space-y-0.5">
@@ -162,6 +164,12 @@ export const ContactEnrichmentDialog = () => {
                 <div>
                   <span className="text-muted-foreground">Société : </span>
                   <span>{record.company_name}</span>
+                </div>
+              )}
+              {record.linkedin_url && (
+                <div>
+                  <span className="text-muted-foreground">LinkedIn : </span>
+                  <span className="break-all">{record.linkedin_url}</span>
                 </div>
               )}
             </div>

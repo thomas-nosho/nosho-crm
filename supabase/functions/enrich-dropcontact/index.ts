@@ -28,6 +28,7 @@ async function handler(req: Request): Promise<Response> {
             last_name: data.last_name,
             email: data.email,
             company: data.company_name,
+            ...(data.linkedin_url ? { linkedin: data.linkedin_url } : {}),
           },
         ]
       : [{ company: data.name, website: data.website }];
