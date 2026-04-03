@@ -193,6 +193,9 @@ const GoogleConnectorCard = () => {
 
   const connected = status?.connected ?? false;
   const preferences = status?.preferences;
+  const hasContactsWriteScope = status?.scopes?.includes(
+    "https://www.googleapis.com/auth/contacts",
+  );
 
   return (
     <Card id="google">

@@ -41,26 +41,12 @@ export const defaultDealPipelineStatuses = [
 ];
 
 export const defaultDealCategories = [
-  { value: "angiologue", label: "Angiologue" },
-  { value: "api", label: "API" },
-  { value: "cardiologue", label: "Cardiologue" },
-  { value: "centre-dentaire", label: "Centre dentaire" },
-  { value: "centre-esthetique", label: "Centre esthétique" },
-  { value: "chirurgien", label: "Chirurgien" },
-  { value: "dentiste", label: "Dentiste" },
-  { value: "dermatologue", label: "Dermatologue" },
-  { value: "entreprise", label: "Entreprise" },
-  { value: "esthetique", label: "Esthétique" },
-  { value: "groupement", label: "Groupement" },
   { value: "hopital", label: "Hôpital" },
-  { value: "institut", label: "Institut" },
-  { value: "maison-de-sante", label: "Maison de santé" },
-  { value: "medecin", label: "Médecin" },
-  { value: "nephrologue", label: "Néphrologue" },
-  { value: "ophtalmo", label: "Ophtalmo" },
-  { value: "orthodontiste", label: "Orthodontiste" },
-  { value: "pediatre", label: "Pédiatre" },
-  { value: "radiologie", label: "Radiologie" },
+  { value: "centre-soins", label: "Centre de soins" },
+  { value: "cabinet-liberal", label: "Cabinet libéral" },
+  { value: "editeur-logiciels", label: "Éditeur de logiciels" },
+  { value: "prestataire-service", label: "Prestataire de service" },
+  { value: "autre", label: "Autre" },
 ];
 
 export const defaultCompanyTypes = [

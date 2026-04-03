@@ -53,12 +53,11 @@ export const DealsChart = memo(() => {
     });
 
     data.forEach((deal) => {
-      // Won deals: group by trial_start_date if available, else expected_closing_date
+      // Won deals: group by won_at if available, else expected_closing_date
       const isWon = deal.stage === "closed-won";
-      const dateStr =
-        isWon && deal.trial_start_date
-          ? deal.trial_start_date
-          : deal.expected_closing_date;
+      const dateStr = isWon
+        ? (deal.won_at ?? deal.expected_closing_date)
+        : deal.expected_closing_date;
 
       if (!dateStr) return;
       const monthKey = startOfMonth(parseISO(dateStr)).toISOString();

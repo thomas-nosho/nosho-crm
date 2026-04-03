@@ -185,7 +185,7 @@ const DealMiscInputs = () => {
         source="expected_closing_date"
         label="Date de clôture prévue"
         helperText={false}
-        defaultValue={new Date().toISOString().split("T")[0]}
+        defaultValue={today}
       />
       <DateInput
         source="trial_start_date"
