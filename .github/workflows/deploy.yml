@@ -56,6 +56,7 @@ jobs:
         name: 🚀 Deploy (demo)
         runs-on: ubuntu-latest
         timeout-minutes: 10
+        if: ${{ vars.DEMO_DEPLOY_REPOSITORY != '' }}
 
         env:
             VITE_IS_DEMO: true
@@ -205,7 +206,8 @@ jobs:
               name: Supabase deployment skipped
               run: echo ':warning:Supabase deployment skipped' >> $GITHUB_STEP_SUMMARY
 
-            - name: 📡 Deploy GitHub pages
+            - if: ${{ vars.DEPLOY_REPOSITORY != '' }}
+              name: 📡 Deploy GitHub pages
               run: npx gh-pages --remote production -d dist -b ${{ vars.DEPLOY_BRANCH || 'gh-pages' }}
               env:
                   GITHUB_TOKEN: ${{ secrets.DEPLOY_TOKEN || secrets.GITHUB_TOKEN }}
