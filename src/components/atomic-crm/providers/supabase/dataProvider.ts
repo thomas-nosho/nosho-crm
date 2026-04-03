@@ -351,6 +351,21 @@ const getDataProviderWithCustomMethods = () => {
       if (error) throw new Error("Failed to update Google preferences");
       return preferences;
     },
+    async syncGoogleContacts() {
+      const { data, error } = await getSupabaseClient().functions.invoke<{
+        data: {
+          total: number;
+          created: number;
+          updated: number;
+          skipped: number;
+        };
+      }>("google-contacts-sync", {
+        method: "POST",
+        body: { action: "sync" },
+      });
+      if (error) throw new Error("Failed to sync Google contacts");
+      return data!.data;
+    },
     async getUpcomingCalendarEvents(params: {
       timeMin: string;
       timeMax: string;
@@ -399,7 +414,9 @@ const getDataProviderWithCustomMethods = () => {
   } satisfies DataProvider;
 };
 
-export type CrmDataProvider = ReturnType<typeof getDataProviderWithCustomMethods>;
+export type CrmDataProvider = ReturnType<
+  typeof getDataProviderWithCustomMethods
+>;
 
 const processConfigLogo = async (logo: any): Promise<string> => {
   if (typeof logo === "string") return logo;
@@ -497,11 +514,9 @@ const lifeCycleCallbacks: ResourceCallbacks[] = [
   {
     resource: "contacts_summary",
     beforeGetList: async (params) => {
-      return applyFullTextSearch([
-        "first_name",
-        "last_name",
-        "company_name",
-      ])(params);
+      return applyFullTextSearch(["first_name", "last_name", "company_name"])(
+        params,
+      );
     },
   },
   {
@@ -603,8 +618,7 @@ const uploadToBucket = async (fi: RAFile) => {
     // Sign URL check if path exists in the bucket
     if (fi.path) {
       const { error } = await getSupabaseClient()
-        .storage
-        .from(ATTACHMENTS_BUCKET)
+        .storage.from(ATTACHMENTS_BUCKET)
         .createSignedUrl(fi.path, 60);
 
       if (!error) {
@@ -638,8 +652,7 @@ const uploadToBucket = async (fi: RAFile) => {
   const fileName = `${Math.random()}${fileExt}`;
   const filePath = `${fileName}`;
   const { error: uploadError } = await getSupabaseClient()
-    .storage
-    .from(ATTACHMENTS_BUCKET)
+    .storage.from(ATTACHMENTS_BUCKET)
     .upload(filePath, dataContent);
 
   if (uploadError) {
@@ -648,8 +661,7 @@ const uploadToBucket = async (fi: RAFile) => {
   }
 
   const { data } = getSupabaseClient()
-    .storage
-    .from(ATTACHMENTS_BUCKET)
+    .storage.from(ATTACHMENTS_BUCKET)
     .getPublicUrl(filePath);
 
   fi.path = filePath;

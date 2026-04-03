@@ -15,6 +15,7 @@ import {
   EyeOff,
   Save,
   Trash2,
+  RefreshCw,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -92,6 +93,7 @@ const GoogleConnectorCard = () => {
   const invalidate = useInvalidateGoogleStatus();
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const handleConnect = useCallback(async () => {
     setConnecting(true);
@@ -127,6 +129,24 @@ const GoogleConnectorCard = () => {
       notify("Erreur lors de la révocation", { type: "error" });
     } finally {
       setDisconnecting(false);
+    }
+  }, [dataProvider, notify, invalidate]);
+
+  const handleSyncContacts = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const result = await dataProvider.syncGoogleContacts();
+      notify(
+        `Synchronisation terminée : ${result.created} contact(s) importé(s)`,
+        { type: "success" },
+      );
+      invalidate();
+    } catch {
+      notify("Erreur lors de la synchronisation des contacts", {
+        type: "error",
+      });
+    } finally {
+      setSyncing(false);
     }
   }, [dataProvider, notify, invalidate]);
 
@@ -297,8 +317,28 @@ const GoogleConnectorCard = () => {
                 label="Synchroniser les contacts Google"
                 description="Importer vos contacts Google dans le CRM (correspondance par email)"
                 checked={preferences.syncContacts}
-                onChange={(v) => handlePreferenceChange("syncContacts", v)}
+                onChange={async (v) => {
+                  await handlePreferenceChange("syncContacts", v);
+                  if (v) handleSyncContacts();
+                }}
               />
+              {preferences.syncContacts && (
+                <div className="ml-7">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSyncContacts}
+                    disabled={syncing}
+                  >
+                    {syncing ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                    )}
+                    Synchroniser maintenant
+                  </Button>
+                </div>
+              )}
             </div>
           </>
         )}
