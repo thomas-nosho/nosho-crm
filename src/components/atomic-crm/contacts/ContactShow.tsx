@@ -32,6 +32,7 @@ import { ContactEmailHistory } from "./ContactEmailHistory";
 import { ContactCalendarEvents } from "./ContactCalendarEvents";
 import { ExportVCardButton } from "./ExportVCardButton";
 import { ContactMergeButton } from "./ContactMergeButton";
+import { ContactEnrichmentDialog } from "./ContactEnrichmentDialog";
 import { AddTask } from "../tasks/AddTask";
 import { TasksIterator } from "../tasks/TasksIterator";
 import type { Contact } from "../types";
@@ -254,9 +255,8 @@ const ContactShowContent = () => {
   return (
     <div className="mt-2 mb-8 space-y-4">
       {/* ── Command Strip Header ── */}
-      <div className="bg-background rounded-xl border border-border shadow-sm overflow-hidden">
+      <div className="rounded-xl border border-border shadow-sm overflow-hidden">
         <div className="flex items-center gap-5 px-6 py-5">
-          {/* Large avatar */}
           <ShadcnAvatar className="size-14 ring-2 ring-orange-100 shrink-0">
             <AvatarImage src={record.avatar?.src ?? undefined} />
             <AvatarFallback className="text-base font-semibold">
@@ -264,9 +264,8 @@ const ContactShowContent = () => {
             </AvatarFallback>
           </ShadcnAvatar>
 
-          {/* Name + title/company */}
           <div className="flex-1 min-w-0">
-            <h1 className="text-3xl font-bold tracking-tight leading-none mb-1.5">
+            <h1 className="text-2xl font-bold tracking-tight leading-none mb-1">
               <RecordRepresentation />
             </h1>
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -289,8 +288,7 @@ const ContactShowContent = () => {
             </div>
           </div>
 
-          {/* Company logo + edit button */}
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <ReferenceField
               source="company_id"
               reference="companies"
@@ -304,14 +302,14 @@ const ContactShowContent = () => {
               variant="outline"
               className="border-orange-200 text-orange-600 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-300 transition-colors"
             />
+            <ContactEnrichmentDialog />
           </div>
         </div>
-        {/* Orange accent bar */}
         <div className="h-[3px] bg-gradient-to-r from-orange-500 via-orange-400 to-orange-300" />
       </div>
 
       {/* ── 3-Column Body ── */}
-      <div className="grid grid-cols-[260px_1fr_260px] gap-4 items-start">
+      <div className="grid grid-cols-[280px_minmax(0,1fr)_280px] gap-5 items-start">
 
         {/* ── LEFT: Contact details ── */}
         <div className="space-y-3">
@@ -327,11 +325,10 @@ const ContactShowContent = () => {
             <TagsListEdit />
           </SectionCard>
 
-          <div className="flex flex-col gap-2 px-1 pt-1">
+          <div className="flex flex-col gap-1.5 pt-2 px-1">
             <ExportVCardButton />
             <ContactMergeButton />
-          </div>
-          <div className="flex flex-col gap-2 px-1 pt-1 border-t border-border">
+            <Separator className="my-1" />
             <DeleteButton
               className="h-6 cursor-pointer hover:bg-destructive/10! text-destructive! border-destructive! focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40"
               size="sm"
@@ -340,7 +337,7 @@ const ContactShowContent = () => {
         </div>
 
         {/* ── CENTER: Notes ── */}
-        <div className="bg-background rounded-xl border border-border shadow-sm overflow-hidden min-h-[300px]">
+        <div className="rounded-xl border border-border shadow-sm overflow-hidden">
           <ReferenceManyField
             target="contact_id"
             reference="contact_notes"
@@ -392,7 +389,7 @@ const SectionCard = ({
   accent?: boolean;
   children: ReactNode;
 }) => (
-  <div className="bg-background rounded-xl border border-border shadow-sm p-4">
+  <div className="rounded-xl border border-border shadow-sm px-5 py-4">
     <p
       className={`text-[10px] font-semibold uppercase tracking-widest mb-3 ${
         accent ? "text-orange-500" : "text-muted-foreground"
@@ -400,6 +397,6 @@ const SectionCard = ({
     >
       {label}
     </p>
-    {children}
+    <div className="text-sm space-y-1">{children}</div>
   </div>
 );
