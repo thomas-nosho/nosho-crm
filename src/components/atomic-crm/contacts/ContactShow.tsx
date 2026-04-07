@@ -74,7 +74,7 @@ const ContactShowContentMobile = () => {
 
   return (
     <>
-      {/* We need to repeat the note creation sheet here to support the note 
+      {/* We need to repeat the note creation sheet here to support the note
       create button that is rendered when there are no notes. */}
       <NoteCreateSheet
         open={noteCreateOpen}
@@ -167,7 +167,9 @@ const ContactShowContentMobile = () => {
               sort={{ field: "date", order: "DESC" }}
               empty={
                 <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <p className="text-muted-foreground mb-4">Aucune note pour l'instant</p>
+                  <p className="text-muted-foreground mb-4">
+                    Aucune note pour l'instant
+                  </p>
                   <Button
                     variant="outline"
                     onClick={() => setNoteCreateOpen(true)}
@@ -312,7 +314,6 @@ const ContactShowContent = () => {
 
       {/* ── 3-Column Body ── */}
       <div className="grid grid-cols-[260px_1fr_260px] gap-4 items-start">
-
         {/* ── LEFT: Contact details ── */}
         <div className="space-y-3">
           <SectionCard label="Contact" accent>

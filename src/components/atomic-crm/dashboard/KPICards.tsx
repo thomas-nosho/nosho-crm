@@ -356,8 +356,6 @@ export function KPICards() {
     );
   }, [allHotContacts, opportuniteCompanyIds]);
 
-  const hotCount = useMemo(() => hotContacts?.length ?? 0, [hotContacts]);
-
   if (isPendingContacts || isPendingDeals) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

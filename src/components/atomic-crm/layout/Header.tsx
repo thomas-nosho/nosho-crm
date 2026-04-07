@@ -1,4 +1,15 @@
-import { Import, Plus, Plug, Settings, User, Users, Contact, Building2, TrendingUp, LayoutGrid } from "lucide-react";
+import {
+  Import,
+  Plus,
+  Plug,
+  Settings,
+  User,
+  Users,
+  Contact,
+  Building2,
+  TrendingUp,
+  LayoutGrid,
+} from "lucide-react";
 import { CanAccess, useCanAccess, useGetIdentity, useUserMenu } from "ra-core";
 import { useState } from "react";
 import { Link, matchPath, useLocation, useNavigate } from "react-router";
@@ -13,7 +24,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { useConfigurationContext, type CustomView } from "../root/ConfigurationContext";
+import {
+  useConfigurationContext,
+  type CustomView,
+} from "../root/ConfigurationContext";
 import { ImportPage } from "../misc/ImportPage";
 import { CreateViewDialog } from "../deals/CreateViewDialog";
 import { APP_VERSION } from "../../../version";
@@ -154,8 +168,7 @@ const Header = () => {
   );
 };
 
-const startsWithVowel = (s: string) =>
-  /^[aeiouéèêàâùûîôäëïöü]/i.test(s);
+const startsWithVowel = (s: string) => /^[aeiouéèêàâùûîôäëïöü]/i.test(s);
 
 const getViewCreateLabel = (view: CustomView) => {
   const name = view.companyType.toLowerCase();

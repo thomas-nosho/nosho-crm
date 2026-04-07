@@ -79,7 +79,7 @@ const DealLinkedToInputs = ({
     if (!getValues("company_type") && companyTypeFilter) {
       setValue("company_type", companyTypeFilter);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleTypeChange = (newType: string) => {
