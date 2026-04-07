@@ -34,12 +34,15 @@ supabase/.temp
 dist/
 /lib/
 .env
+.env.development
+.env.e2e
 *storybook.log
 
 # Shadcn Registry
 public/r/
 
-!supabase/functions/.env
+supabase/functions/.env
+supabase/signing_keys.json
 .claude/settings.local.json
 
 # Playwright
