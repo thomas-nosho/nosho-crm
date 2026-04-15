@@ -19,6 +19,7 @@ type ChatMessage = {
 
 type RequestBody = {
   draft?: Draft;
+  sessionId?: string;
   currentRoute?: string;
   userAgent?: string;
   transcript?: ChatMessage[];
@@ -97,6 +98,8 @@ async function handler(req: Request, user?: User): Promise<Response> {
     : [];
 
   const payload = {
+    mode: "submit",
+    sessionId: body.sessionId ?? "",
     source: "nosho-crm",
     submittedAt: new Date().toISOString(),
     author: {

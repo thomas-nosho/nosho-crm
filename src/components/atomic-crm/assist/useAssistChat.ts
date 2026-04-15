@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { getSupabaseClient } from "../providers/supabase/supabase";
 
 export type ChatMessage = {
@@ -15,38 +15,20 @@ export type AssistDraft = {
 
 type AssistChatResponse = {
   reply: string;
-  draft?: AssistDraft;
+  draft: AssistDraft | null;
 };
 
 type SubmitResponse = {
   ok: boolean;
   issueUrl?: string;
+  issueNumber?: number;
 };
 
-/**
- * Try to extract a JSON draft from the assistant's reply.
- * Claude is instructed to wrap its final answer in a ```json ... ``` block.
- */
-function extractDraft(text: string): AssistDraft | null {
-  const fenced = text.match(/```json\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1] : null;
-  if (!candidate) return null;
-  try {
-    const parsed = JSON.parse(candidate);
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      parsed.ready === true &&
-      typeof parsed.title === "string" &&
-      typeof parsed.summary === "string" &&
-      ["bug", "feature", "question"].includes(parsed.type)
-    ) {
-      return parsed as AssistDraft;
-    }
-  } catch {
-    return null;
+function generateSessionId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `nosho-${crypto.randomUUID()}`;
   }
-  return null;
+  return `nosho-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export function useAssistChat() {
@@ -55,6 +37,7 @@ export function useAssistChat() {
   const [isSending, setIsSending] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sessionIdRef = useRef<string>(generateSessionId());
 
   const reset = useCallback(() => {
     setMessages([]);
@@ -62,6 +45,9 @@ export function useAssistChat() {
     setError(null);
     setIsSending(false);
     setIsSubmitting(false);
+    // Fresh sessionId — n8n memory is keyed on this, so a new one starts a
+    // clean conversation.
+    sessionIdRef.current = generateSessionId();
   }, []);
 
   const sendMessage = useCallback(
@@ -71,8 +57,7 @@ export function useAssistChat() {
 
       setError(null);
       const userMessage: ChatMessage = { role: "user", content: trimmed };
-      const nextMessages = [...messages, userMessage];
-      setMessages(nextMessages);
+      setMessages((prev) => [...prev, userMessage]);
       setIsSending(true);
 
       try {
@@ -81,7 +66,8 @@ export function useAssistChat() {
             "assist-chat",
             {
               body: {
-                messages: nextMessages,
+                sessionId: sessionIdRef.current,
+                message: trimmed,
                 context: {
                   currentRoute:
                     typeof window !== "undefined"
@@ -93,23 +79,27 @@ export function useAssistChat() {
           );
 
         if (invokeError) throw invokeError;
-        if (!data?.reply) throw new Error("Réponse vide de l'assistant");
+        if (!data) throw new Error("Réponse vide de l'assistant");
 
-        const assistantMessage: ChatMessage = {
-          role: "assistant",
-          content: data.reply,
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
+        const reply = data.reply ?? "";
+        if (reply) {
+          const assistantMessage: ChatMessage = {
+            role: "assistant",
+            content: reply,
+          };
+          setMessages((prev) => [...prev, assistantMessage]);
+        }
 
-        const extracted = data.draft ?? extractDraft(data.reply);
-        if (extracted) setDraft(extracted);
+        if (data.draft) {
+          setDraft(data.draft);
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
         setIsSending(false);
       }
     },
-    [messages, isSending],
+    [isSending],
   );
 
   const submitDraft = useCallback(async (): Promise<SubmitResponse | null> => {
@@ -122,6 +112,7 @@ export function useAssistChat() {
           "assist-submit",
           {
             body: {
+              sessionId: sessionIdRef.current,
               draft,
               currentRoute:
                 typeof window !== "undefined"

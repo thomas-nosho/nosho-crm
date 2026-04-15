@@ -1,51 +1,35 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { type User } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders, OptionsMiddleware } from "../_shared/cors.ts";
-import { AuthMiddleware } from "../_shared/authentication.ts";
+import { AuthMiddleware, UserMiddleware } from "../_shared/authentication.ts";
+import { getUserSale } from "../_shared/getUserSale.ts";
+import { createErrorResponse } from "../_shared/utils.ts";
 
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-6";
-const MAX_TOKENS = 1024;
+/**
+ * Thin proxy that forwards a chat turn to the n8n `Nosho Assist Inbox`
+ * workflow. The workflow owns the conversation (Mistral AI Agent + memory
+ * keyed on sessionId), so this function only validates auth, enriches the
+ * payload with the authenticated user identity, and relays the response.
+ */
 
-const SYSTEM_PROMPT = `Tu es Nosho AI Assist, un assistant intégré au CRM Nosho.
-Tu aides Thomas (CEO), Benjamin (responsable des ventes), Denis et Julie à formuler
-des demandes d'amélioration ou des bugs sans qu'ils aient à ouvrir GitHub eux-mêmes.
-
-Ton style : chaleureux, concis, en français. Tutoiement.
-
-Étape 1 — Comprendre. Pose 1 à 3 questions courtes maximum (idéalement 1 ou 2)
-pour clarifier :
-  - Est-ce un bug, une nouvelle idée, ou une question ?
-  - Sur quelle vue / quel écran (contacts, opportunités, dashboard…) ?
-  - Quel est l'impact concret pour le travail de l'utilisateur ?
-
-Ne pose JAMAIS plus de 3 questions au total. Si l'utilisateur a déjà donné assez
-d'info dès le premier message, passe directement à l'étape 2.
-
-Étape 2 — Récapituler. Quand tu as compris, écris une ou deux phrases d'accusé
-de réception en français, PUIS ajoute STRICTEMENT en fin de message un bloc :
-
-\`\`\`json
-{
-  "type": "bug" | "feature" | "question",
-  "title": "<titre court, moins de 70 caractères>",
-  "summary": "<3 à 5 puces markdown décrivant la demande, le contexte et l'impact>",
-  "ready": true
-}
-\`\`\`
-
-Le champ "ready": true est OBLIGATOIRE pour déclencher l'envoi côté UI.
-N'invente jamais de fonctionnalités déjà existantes. En cas de doute, demande.`;
-
-type ChatMessage = {
-  role: "user" | "assistant";
-  content: string;
+type Draft = {
+  type: "bug" | "feature" | "question";
+  title: string;
+  summary: string;
+  ready: true;
 };
 
 type RequestBody = {
-  messages?: ChatMessage[];
+  sessionId?: string;
+  message?: string;
   context?: {
     currentRoute?: string;
   };
+};
+
+type N8nChatResponse = {
+  reply: string;
+  draft: Draft | null;
 };
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -55,11 +39,15 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
-async function handler(req: Request): Promise<Response> {
-  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!apiKey) {
-    console.error("[assist-chat] ANTHROPIC_API_KEY secret is not set");
-    return jsonResponse(500, { error: "ANTHROPIC_API_KEY not configured" });
+async function handler(req: Request, user?: User): Promise<Response> {
+  if (req.method !== "POST") {
+    return createErrorResponse(405, "Method Not Allowed");
+  }
+
+  const webhookUrl = Deno.env.get("N8N_WEBHOOK_URL");
+  if (!webhookUrl) {
+    console.error("[assist-chat] N8N_WEBHOOK_URL secret is not set");
+    return jsonResponse(500, { error: "N8N_WEBHOOK_URL not configured" });
   }
 
   let body: RequestBody;
@@ -70,85 +58,90 @@ async function handler(req: Request): Promise<Response> {
     return jsonResponse(400, { error: "Invalid JSON body" });
   }
 
-  const messages = Array.isArray(body.messages) ? body.messages : [];
-  if (messages.length === 0) {
-    return jsonResponse(400, { error: "messages array is required" });
+  const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
+  const message = typeof body.message === "string" ? body.message.trim() : "";
+  if (!sessionId || !message) {
+    return jsonResponse(400, { error: "sessionId and message are required" });
   }
 
-  // Sanitize messages — only keep role + content fields, cap content length.
-  const sanitized = messages
-    .filter(
-      (m) =>
-        m &&
-        (m.role === "user" || m.role === "assistant") &&
-        typeof m.content === "string",
-    )
-    .map((m) => ({
-      role: m.role,
-      content: m.content.slice(0, 4000),
-    }));
+  // Resolve a human-readable author name from the sales table.
+  let authorName = user?.email ?? "Unknown";
+  let authorEmail = user?.email ?? "";
+  if (user) {
+    try {
+      const sale = await getUserSale(user);
+      if (sale) {
+        const first = (sale as { first_name?: string }).first_name ?? "";
+        const last = (sale as { last_name?: string }).last_name ?? "";
+        const composed = `${first} ${last}`.trim();
+        if (composed) authorName = composed;
+        const saleEmail = (sale as { email?: string }).email;
+        if (saleEmail) authorEmail = saleEmail;
+      }
+    } catch (e) {
+      console.warn("[assist-chat] getUserSale failed:", e);
+    }
+  }
 
-  const contextLine = body.context?.currentRoute
-    ? `\n\n[Contexte UI: l'utilisateur est sur la route "${body.context.currentRoute}"]`
-    : "";
-
-  const anthropicBody = {
-    model: MODEL,
-    max_tokens: MAX_TOKENS,
-    system: [
-      {
-        type: "text",
-        text: SYSTEM_PROMPT + contextLine,
-        // Cache the system prompt — saves tokens on every follow-up turn.
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    messages: sanitized,
+  const payload = {
+    mode: "chat",
+    sessionId,
+    message: message.slice(0, 4000),
+    author: {
+      name: authorName,
+      email: authorEmail,
+      userId: user?.id ?? null,
+    },
+    context: {
+      currentRoute: body.context?.currentRoute ?? "",
+    },
+    source: "nosho-crm",
+    submittedAt: new Date().toISOString(),
   };
 
-  let res: Response;
+  let webhookRes: Response;
   try {
-    res = await fetch(ANTHROPIC_API_URL, {
+    webhookRes = await fetch(webhookUrl, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(anthropicBody),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     });
   } catch (e) {
-    console.error("[assist-chat] fetch failed:", e);
-    return jsonResponse(502, { error: "Failed to reach Anthropic API" });
+    console.error("[assist-chat] webhook fetch failed:", e);
+    return jsonResponse(502, { error: "Failed to reach n8n webhook" });
   }
 
-  if (!res.ok) {
-    const text = await res.text();
-    console.error(`[assist-chat] Anthropic ${res.status}: ${text}`);
-    return jsonResponse(res.status, {
-      error: `Anthropic error ${res.status}`,
-      detail: text,
+  if (!webhookRes.ok) {
+    const text = await webhookRes.text();
+    console.error(`[assist-chat] n8n webhook ${webhookRes.status}: ${text}`);
+    return jsonResponse(502, {
+      error: `n8n webhook error ${webhookRes.status}`,
+      detail: text.slice(0, 500),
     });
   }
 
-  const data = await res.json();
-  const reply: string =
-    Array.isArray(data?.content) && data.content[0]?.type === "text"
-      ? data.content[0].text
-      : "";
-
-  if (!reply) {
-    console.warn("[assist-chat] empty reply from Anthropic", data);
-    return jsonResponse(502, { error: "Empty reply from Anthropic" });
+  let data: N8nChatResponse;
+  try {
+    data = (await webhookRes.json()) as N8nChatResponse;
+  } catch (e) {
+    console.error("[assist-chat] failed to parse n8n response:", e);
+    return jsonResponse(502, { error: "Invalid response from n8n" });
   }
 
   console.log(
-    `[assist-chat] turn ok — ${sanitized.length} msgs in, ${reply.length} chars out`,
+    `[assist-chat] ${authorName} (${sessionId}) — reply ${data?.reply?.length ?? 0} chars, draft=${data?.draft ? "yes" : "no"}`,
   );
 
-  return jsonResponse(200, { reply });
+  return jsonResponse(200, {
+    reply: data.reply ?? "",
+    draft: data.draft ?? null,
+  });
 }
 
 Deno.serve((req) =>
-  OptionsMiddleware(req, (req) => AuthMiddleware(req, handler)),
+  OptionsMiddleware(req, (req) =>
+    AuthMiddleware(req, (req) =>
+      UserMiddleware(req, (req, user) => handler(req, user)),
+    ),
+  ),
 );
