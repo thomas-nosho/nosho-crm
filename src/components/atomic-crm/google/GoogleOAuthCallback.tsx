@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { useDataProvider, useNotify } from "ra-core";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
 import type { CrmDataProvider } from "../providers/types";
@@ -10,6 +10,7 @@ export const GoogleOAuthCallback = () => {
   const dataProvider = useDataProvider<CrmDataProvider>();
   const notify = useNotify();
   const invalidate = useInvalidateGoogleStatus();
+  const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<"loading" | "success" | "error">(
     "loading",
   );
@@ -19,9 +20,8 @@ export const GoogleOAuthCallback = () => {
     if (exchangedRef.current) return;
     exchangedRef.current = true;
 
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    const error = params.get("error");
+    const code = searchParams.get("code");
+    const error = searchParams.get("error");
 
     if (error || !code) {
       setStatus("error");
@@ -43,7 +43,7 @@ export const GoogleOAuthCallback = () => {
         notify(err.message || "Erreur de connexion Google", { type: "error" });
         setTimeout(() => navigate("/connectors"), 2000);
       });
-  }, [dataProvider, navigate, notify, invalidate]);
+  }, [dataProvider, navigate, notify, invalidate, searchParams]);
 
   return (
     <div className="flex items-center justify-center min-h-screen">
