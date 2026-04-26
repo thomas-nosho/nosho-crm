@@ -76,7 +76,7 @@ export const DealListForView = () => {
     >
       <List
         resource="deals"
-        perPage={100}
+        perPage={1000}
         filter={{
           "archived_at@is": null,
           // Only apply the company_type constraint when the view actually
