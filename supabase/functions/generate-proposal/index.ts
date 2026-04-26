@@ -9,8 +9,7 @@ import {
 import { createErrorResponse } from "../_shared/utils.ts";
 import { buildProposalPayload } from "./buildPayload.ts";
 
-const NOSHO_API_URL =
-  "https://nosho-doc-generator.nosho-ai.workers.dev/api/proposals";
+const NOSHO_API_URL = "https://doc.nosho.org/api/proposals";
 const NOSHO_TIMEOUT_MS = 15000;
 
 type RequestBody = {
