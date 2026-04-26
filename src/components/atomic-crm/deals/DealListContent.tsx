@@ -233,7 +233,7 @@ const updateDealStage = async (
     // Fetch all the deals in this stage (because the list may be filtered, but we need to update even non-filtered deals)
     const { data: columnDeals } = await dataProvider.getList("deals", {
       sort: { field: "index", order: "ASC" },
-      pagination: { page: 1, perPage: 100 },
+      pagination: { page: 1, perPage: 1000 },
       filter: { stage: source.stage },
     });
     const destinationIndex = destination.index ?? columnDeals.length + 1;
@@ -298,12 +298,12 @@ const updateDealStage = async (
       await Promise.all([
         dataProvider.getList("deals", {
           sort: { field: "index", order: "ASC" },
-          pagination: { page: 1, perPage: 100 },
+          pagination: { page: 1, perPage: 1000 },
           filter: { stage: source.stage },
         }),
         dataProvider.getList("deals", {
           sort: { field: "index", order: "ASC" },
-          pagination: { page: 1, perPage: 100 },
+          pagination: { page: 1, perPage: 1000 },
           filter: { stage: destination.stage },
         }),
       ]);

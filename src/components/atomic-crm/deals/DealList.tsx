@@ -50,7 +50,7 @@ const DealList = () => {
 
   return (
     <List
-      perPage={100}
+      perPage={1000}
       filter={{ "archived_at@is": null, "company_type@is": null }}
       title={false}
       sort={{ field: "index", order: "DESC" }}
