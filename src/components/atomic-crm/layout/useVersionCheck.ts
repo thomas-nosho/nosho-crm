@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useRegisterSW } from "virtual:pwa-register/react";
 import { APP_VERSION } from "../../../version";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
@@ -17,8 +18,33 @@ async function fetchRemoteVersion(): Promise<string | null> {
   }
 }
 
+async function nukeCachesAndReload() {
+  try {
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+  } finally {
+    window.location.reload();
+  }
+}
+
 export function useVersionCheck() {
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
+
+  const { updateServiceWorker } = useRegisterSW({
+    immediate: true,
+    onRegisteredSW(_swUrl, registration) {
+      if (!registration) return;
+      setInterval(() => {
+        registration.update().catch(() => {});
+      }, POLL_INTERVAL_MS);
+    },
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -46,9 +72,13 @@ export function useVersionCheck() {
     };
   }, []);
 
-  const reload = useCallback(() => {
-    window.location.reload();
-  }, []);
+  const reload = useCallback(async () => {
+    try {
+      await updateServiceWorker(true);
+    } catch {
+      await nukeCachesAndReload();
+    }
+  }, [updateServiceWorker]);
 
   return {
     hasUpdate: latestVersion !== null,
