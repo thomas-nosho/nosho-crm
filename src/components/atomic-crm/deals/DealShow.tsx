@@ -28,6 +28,7 @@ import { useConfigurationContext } from "../root/ConfigurationContext";
 import { TaskCreateSheet } from "../tasks/TaskCreateSheet";
 import type { Deal } from "../types";
 import { ContactList } from "./ContactList";
+import { DealTasks } from "./DealTasks";
 import { findDealLabel } from "./deal";
 import { formatISODateString } from "./dealUtils";
 import { GenerateProposalAction } from "./GenerateProposalAction";
@@ -178,6 +179,12 @@ const DealShowContent = () => {
                 Description
               </span>
               <p className="text-sm leading-6">{record.description}</p>
+            </div>
+          )}
+
+          {!record.archived_at && !!record.contact_ids?.length && (
+            <div className="m-4">
+              <DealTasks contactIds={record.contact_ids as number[]} />
             </div>
           )}
 
