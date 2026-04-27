@@ -602,11 +602,15 @@
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/deals/OnlyMineInput.tsx",
+          "path": "src/components/atomic-crm/deals/SalesFilterInput.tsx",
           "type": "registry:component"
         },
         {
           "path": "src/components/atomic-crm/deals/GenerateProposalAction.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/deals/DealTasks.tsx",
           "type": "registry:component"
         },
         {
