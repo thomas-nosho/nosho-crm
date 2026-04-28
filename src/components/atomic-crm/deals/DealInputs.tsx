@@ -1,7 +1,6 @@
 import { useContext, useEffect, useState } from "react";
 import { required, useCanAccess, useRecordContext } from "ra-core";
 import { useFormContext } from "react-hook-form";
-import { AutocompleteArrayInput } from "@/components/admin/autocomplete-array-input";
 import { ReferenceArrayInput } from "@/components/admin/reference-array-input";
 import { ReferenceInput } from "@/components/admin/reference-input";
 import { TextInput } from "@/components/admin/text-input";
@@ -18,9 +17,9 @@ import {
 } from "@/components/ui/select";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-import { contactOptionText } from "../misc/ContactOption";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import { AutocompleteCompanyInput } from "../companies/AutocompleteCompanyInput.tsx";
+import { AutocompleteContactArrayInput } from "../contacts/AutocompleteContactArrayInput";
 import { DealListViewContext } from "./DealListContent";
 import type { Sale } from "../types";
 
@@ -120,11 +119,7 @@ const DealLinkedToInputs = ({
       </ReferenceInput>
 
       <ReferenceArrayInput source="contact_ids" reference="contacts_summary">
-        <AutocompleteArrayInput
-          label="Contacts associés"
-          optionText={contactOptionText}
-          helperText={false}
-        />
+        <AutocompleteContactArrayInput />
       </ReferenceArrayInput>
     </div>
   );
