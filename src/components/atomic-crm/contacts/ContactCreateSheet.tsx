@@ -14,8 +14,8 @@ export interface ContactCreateSheetProps {
   /**
    * Callback appelée après la création réussie d'un contact, avec le record
    * complet. Lorsque cette prop est fournie, le sheet ne redirige PAS vers la
-   * page show du contact (pour rester sur le formulaire parent) et c'est
-   * au consommateur de fermer le sheet via `onOpenChange`.
+   * page show du contact (pour rester sur le formulaire parent) et se ferme
+   * automatiquement après la création.
    */
   onCreated?: (contact: Contact) => void;
 }
