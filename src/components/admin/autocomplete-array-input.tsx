@@ -270,9 +270,22 @@ export const AutocompleteArrayInput = (
                         const isCreateItem =
                           !!createItem && choice?.id === createItem.id;
                         const disabled = getOptionDisabled(choice);
+                        const choiceText = getChoiceText(
+                          isCreateItem ? createItem : choice,
+                        );
                         return (
                           <CommandItem
                             key={getChoiceValue(choice)}
+                            value={
+                              isCreateItem
+                                ? `?${filterValue}?`
+                                : getChoiceValue(choice)
+                            }
+                            keywords={
+                              isCreateItem || React.isValidElement(choiceText)
+                                ? undefined
+                                : [choiceText]
+                            }
                             disabled={disabled}
                             onMouseDown={(e) => {
                               e.preventDefault();
@@ -283,9 +296,7 @@ export const AutocompleteArrayInput = (
                             }
                             className="cursor-pointer"
                           >
-                            {isCreateItem
-                              ? getChoiceText(createItem)
-                              : getChoiceText(choice)}
+                            {choiceText}
                           </CommandItem>
                         );
                       })}
