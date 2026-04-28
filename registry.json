@@ -518,6 +518,14 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/layout/useVersionCheck.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/layout/VersionUpdateToast.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/layout/TopToolbar.tsx",
           "type": "registry:component"
         },
@@ -574,6 +582,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/deals/useGenerateProposal.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/deals/stages.ts",
           "type": "registry:component"
         },
@@ -591,6 +603,10 @@
         },
         {
           "path": "src/components/atomic-crm/deals/OnlyMineInput.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/deals/GenerateProposalAction.tsx",
           "type": "registry:component"
         },
         {
@@ -823,6 +839,10 @@
         },
         {
           "path": "src/components/atomic-crm/contacts/Avatar.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/contacts/AutocompleteContactArrayInput.tsx",
           "type": "registry:component"
         },
         {
