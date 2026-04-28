@@ -15,7 +15,11 @@ import {
   FormLabel,
 } from "@/components/admin/form";
 import { Command as CommandPrimitive } from "cmdk";
-import type { ChoicesProps, InputProps } from "ra-core";
+import type {
+  ChoicesProps,
+  InputProps,
+  SupportCreateSuggestionOptions,
+} from "ra-core";
 import {
   useChoices,
   useChoicesContext,
@@ -24,6 +28,7 @@ import {
   useTranslate,
   FieldTitle,
   useEvent,
+  useSupportCreateSuggestion,
 } from "ra-core";
 import { InputHelperText } from "./input-helper-text";
 import { useCallback } from "react";
@@ -64,6 +69,7 @@ import { useCallback } from "react";
  */
 export const AutocompleteArrayInput = (
   props: Omit<InputProps, "source"> &
+    Omit<SupportCreateSuggestionOptions, "handleChange" | "filter"> &
     Partial<Pick<InputProps, "source">> &
     ChoicesProps & {
       className?: string;
@@ -76,7 +82,17 @@ export const AutocompleteArrayInput = (
         | ((option: any | undefined) => React.ReactNode);
     },
 ) => {
-  const { filterToQuery = DefaultFilterToQuery, inputText } = props;
+  const {
+    filterToQuery = DefaultFilterToQuery,
+    inputText,
+    create,
+    createValue,
+    createLabel,
+    createHintValue,
+    createItemLabel,
+    onCreate,
+    optionText,
+  } = props;
   const {
     allChoices = [],
     source,
@@ -143,112 +159,148 @@ export const AutocompleteArrayInput = (
     [inputText, getChoiceText],
   );
 
+  const handleSelect = useEvent((choice: any) => {
+    setFilterValue("");
+    if (isFromReference) {
+      setFilters(filterToQuery(""));
+    }
+    field.onChange([...field.value, getChoiceValue(choice)]);
+  });
+
+  const {
+    getCreateItem,
+    handleChange: handleChangeWithCreateSupport,
+    createElement,
+    getOptionDisabled,
+  } = useSupportCreateSuggestion({
+    create,
+    createLabel,
+    createValue,
+    createHintValue,
+    createItemLabel,
+    onCreate,
+    handleChange: handleSelect,
+    optionText,
+    filter: filterValue,
+  });
+
+  const createItem =
+    (create || onCreate) && (filterValue !== "" || createLabel)
+      ? getCreateItem(filterValue)
+      : null;
+
+  const finalChoices = createItem
+    ? [...availableChoices, createItem]
+    : availableChoices;
+
   return (
-    <FormField className={props.className} id={id} name={field.name}>
-      {props.label !== false && (
-        <FormLabel>
-          <FieldTitle
-            label={props.label}
-            source={props.source ?? source}
-            resource={resource}
-            isRequired={isRequired}
-          />
-        </FormLabel>
-      )}
-      <FormControl>
-        <Command
-          onKeyDown={handleKeyDown}
-          shouldFilter={!isFromReference}
-          className="overflow-visible bg-transparent"
-        >
-          <div className="group rounded-md bg-transparent dark:bg-input/30 border border-input px-3 py-1.75 text-sm transition-all ring-offset-background focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]">
-            <div className="flex flex-wrap gap-1">
-              {selectedChoices.map((choice) => (
-                <Badge key={getChoiceValue(choice)} variant="outline">
-                  {getInputText(choice)}
-                  <button
-                    className="ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
+    <>
+      <FormField className={props.className} id={id} name={field.name}>
+        {props.label !== false && (
+          <FormLabel>
+            <FieldTitle
+              label={props.label}
+              source={props.source ?? source}
+              resource={resource}
+              isRequired={isRequired}
+            />
+          </FormLabel>
+        )}
+        <FormControl>
+          <Command
+            onKeyDown={handleKeyDown}
+            shouldFilter={!isFromReference}
+            className="overflow-visible bg-transparent"
+          >
+            <div className="group rounded-md bg-transparent dark:bg-input/30 border border-input px-3 py-1.75 text-sm transition-all ring-offset-background focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]">
+              <div className="flex flex-wrap gap-1">
+                {selectedChoices.map((choice) => (
+                  <Badge key={getChoiceValue(choice)} variant="outline">
+                    {getInputText(choice)}
+                    <button
+                      className="ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleUnselect(choice);
+                        }
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
                         handleUnselect(choice);
-                      }
-                    }}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleUnselect(choice);
-                    }}
-                  >
-                    <span className="sr-only">
-                      {translate("ra.action.remove", {
-                        _: "Remove",
-                      })}
-                    </span>
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-              {/* Avoid having the "Search" Icon by not using CommandInput */}
-              <CommandPrimitive.Input
-                ref={inputRef}
-                value={filterValue}
-                onValueChange={(filter) => {
-                  setFilterValue(filter);
-                  // We don't want the ChoicesContext to filter the choices if the input
-                  // is not from a reference as it would also filter out the selected values
-                  if (isFromReference) {
-                    setFilters(filterToQuery(filter), undefined, true);
-                  }
-                }}
-                onBlur={() => setOpen(false)}
-                onFocus={() => setOpen(true)}
-                placeholder={placeholder}
-                className="ml-2 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
-              />
+                      }}
+                    >
+                      <span className="sr-only">
+                        {translate("ra.action.remove", {
+                          _: "Remove",
+                        })}
+                      </span>
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {/* Avoid having the "Search" Icon by not using CommandInput */}
+                <CommandPrimitive.Input
+                  ref={inputRef}
+                  value={filterValue}
+                  onValueChange={(filter) => {
+                    setFilterValue(filter);
+                    // We don't want the ChoicesContext to filter the choices if the input
+                    // is not from a reference as it would also filter out the selected values
+                    if (isFromReference) {
+                      setFilters(filterToQuery(filter), undefined, true);
+                    }
+                  }}
+                  onBlur={() => setOpen(false)}
+                  onFocus={() => setOpen(true)}
+                  placeholder={placeholder}
+                  className="ml-2 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
+                />
+              </div>
             </div>
-          </div>
-          <div className="relative">
-            <CommandList>
-              {open && availableChoices.length > 0 ? (
-                <div className="absolute top-2 z-10 w-full rounded-md border bg-popover text-popover-foreground shadow-md outline-none animate-in">
-                  <CommandGroup className="h-full overflow-auto">
-                    {availableChoices.map((choice) => {
-                      return (
-                        <CommandItem
-                          key={getChoiceValue(choice)}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }}
-                          onSelect={() => {
-                            setFilterValue("");
-                            if (isFromReference) {
-                              setFilters(filterToQuery(""));
+            <div className="relative">
+              <CommandList>
+                {open && finalChoices.length > 0 ? (
+                  <div className="absolute top-2 z-10 w-full rounded-md border bg-popover text-popover-foreground shadow-md outline-none animate-in">
+                    <CommandGroup className="h-full overflow-auto">
+                      {finalChoices.map((choice) => {
+                        const isCreateItem =
+                          !!createItem && choice?.id === createItem.id;
+                        const disabled = getOptionDisabled(choice);
+                        return (
+                          <CommandItem
+                            key={getChoiceValue(choice)}
+                            disabled={disabled}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onSelect={() =>
+                              handleChangeWithCreateSupport(choice)
                             }
-                            field.onChange([
-                              ...field.value,
-                              getChoiceValue(choice),
-                            ]);
-                          }}
-                          className="cursor-pointer"
-                        >
-                          {getChoiceText(choice)}
-                        </CommandItem>
-                      );
-                    })}
-                  </CommandGroup>
-                </div>
-              ) : null}
-            </CommandList>
-          </div>
-        </Command>
-      </FormControl>
-      <InputHelperText helperText={props.helperText} />
-      <FormError />
-    </FormField>
+                            className="cursor-pointer"
+                          >
+                            {isCreateItem
+                              ? getChoiceText(createItem)
+                              : getChoiceText(choice)}
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandGroup>
+                  </div>
+                ) : null}
+              </CommandList>
+            </div>
+          </Command>
+        </FormControl>
+        <InputHelperText helperText={props.helperText} />
+        <FormError />
+      </FormField>
+      {createElement}
+    </>
   );
 };
 
