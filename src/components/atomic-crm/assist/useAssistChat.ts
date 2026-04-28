@@ -6,6 +6,8 @@ import { ATTACHMENTS_BUCKET } from "../providers/commons/attachments";
 // leaked URL eventually expires.
 const ASSIST_ATTACHMENT_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
+export type AssistMode = "feedback" | "crm-action";
+
 export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
@@ -21,6 +23,10 @@ export type AssistDraft = {
 type AssistChatResponse = {
   reply: string;
   draft: AssistDraft | null;
+};
+
+type CrmAgentResponse = {
+  reply: string;
 };
 
 type SubmitResponse = {
@@ -58,7 +64,36 @@ async function uploadAssistImages(files: File[]): Promise<string[]> {
   return urls;
 }
 
-export function useAssistChat() {
+async function sendCrmAction(
+  message: string,
+  sessionId: string,
+): Promise<CrmAgentResponse> {
+  const webhookUrl = import.meta.env.VITE_N8N_CRM_AGENT_WEBHOOK_URL;
+  if (!webhookUrl) {
+    throw new Error(
+      "Mode Action CRM non configuré (VITE_N8N_CRM_AGENT_WEBHOOK_URL)",
+    );
+  }
+  const { data: sessionData } = await getSupabaseClient().auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
+  if (!accessToken) throw new Error("Session expirée — reconnecte-toi");
+
+  const res = await fetch(webhookUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ message, session_id: sessionId }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Agent CRM ${res.status} : ${text.slice(0, 200)}`);
+  }
+  return (await res.json()) as CrmAgentResponse;
+}
+
+export function useAssistChat(mode: AssistMode = "feedback") {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState<AssistDraft | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -88,27 +123,35 @@ export function useAssistChat() {
       setIsSending(true);
 
       try {
-        const { data, error: invokeError } =
-          await getSupabaseClient().functions.invoke<AssistChatResponse>(
-            "assist-chat",
-            {
-              body: {
-                sessionId: sessionIdRef.current,
-                message: trimmed,
-                context: {
-                  currentRoute:
-                    typeof window !== "undefined"
-                      ? window.location.pathname + window.location.hash
-                      : "",
+        let reply = "";
+        let nextDraft: AssistDraft | null = null;
+
+        if (mode === "crm-action") {
+          const data = await sendCrmAction(trimmed, sessionIdRef.current);
+          reply = data.reply ?? "";
+        } else {
+          const { data, error: invokeError } =
+            await getSupabaseClient().functions.invoke<AssistChatResponse>(
+              "assist-chat",
+              {
+                body: {
+                  sessionId: sessionIdRef.current,
+                  message: trimmed,
+                  context: {
+                    currentRoute:
+                      typeof window !== "undefined"
+                        ? window.location.pathname + window.location.hash
+                        : "",
+                  },
                 },
               },
-            },
-          );
+            );
+          if (invokeError) throw invokeError;
+          if (!data) throw new Error("Réponse vide de l'assistant");
+          reply = data.reply ?? "";
+          nextDraft = data.draft ?? null;
+        }
 
-        if (invokeError) throw invokeError;
-        if (!data) throw new Error("Réponse vide de l'assistant");
-
-        const reply = data.reply ?? "";
         if (reply) {
           const assistantMessage: ChatMessage = {
             role: "assistant",
@@ -116,17 +159,14 @@ export function useAssistChat() {
           };
           setMessages((prev) => [...prev, assistantMessage]);
         }
-
-        if (data.draft) {
-          setDraft(data.draft);
-        }
+        if (nextDraft) setDraft(nextDraft);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
         setIsSending(false);
       }
     },
-    [isSending],
+    [isSending, mode],
   );
 
   const submitDraft = useCallback(

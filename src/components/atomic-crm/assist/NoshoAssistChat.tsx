@@ -9,9 +9,10 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { useAssist } from "./assistStore";
-import { useAssistChat } from "./useAssistChat";
+import { useAssistChat, type AssistMode } from "./useAssistChat";
 
 const TYPE_LABEL: Record<"bug" | "feature" | "question", string> = {
   bug: "Bug",
@@ -22,8 +23,13 @@ const TYPE_LABEL: Record<"bug" | "feature" | "question", string> = {
 const MAX_ASSIST_IMAGES = 3;
 const MAX_ASSIST_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
 
+const CRM_MODE_ENABLED = Boolean(
+  import.meta.env.VITE_N8N_CRM_AGENT_WEBHOOK_URL,
+);
+
 export function NoshoAssistChat() {
   const { isOpen, initialMessage, close } = useAssist();
+  const [mode, setMode] = useState<AssistMode>("feedback");
   const {
     messages,
     draft,
@@ -33,7 +39,7 @@ export function NoshoAssistChat() {
     sendMessage,
     submitDraft,
     reset,
-  } = useAssistChat();
+  } = useAssistChat(mode);
 
   const [input, setInput] = useState("");
   const [submitted, setSubmitted] = useState<{ url?: string } | null>(null);
@@ -56,10 +62,21 @@ export function NoshoAssistChat() {
       return [];
     });
     setImageError(null);
+    setMode("feedback");
     // Focus shortly after the sheet animation starts.
     const t = setTimeout(() => textareaRef.current?.focus(), 200);
     return () => clearTimeout(t);
   }, [isOpen, initialMessage, reset]);
+
+  // Reset chat history when switching modes — Mistral memory is keyed on
+  // sessionId, so a clean slate avoids cross-mode leakage.
+  const handleModeChange = (next: string) => {
+    if (!next || next === mode) return;
+    setMode(next as AssistMode);
+    reset();
+    setSubmitted(null);
+    setInput("");
+  };
 
   // Revoke preview URLs when the component unmounts.
   useEffect(() => {
@@ -157,10 +174,28 @@ export function NoshoAssistChat() {
             <div className="flex flex-col min-w-0">
               <SheetTitle>Nosho AI Assist</SheetTitle>
               <SheetDescription>
-                Décrivez un bug, une idée, ou posez une question.
+                {mode === "crm-action"
+                  ? "Demandez à l'agent de chercher, créer ou modifier des contacts et sociétés."
+                  : "Décrivez un bug, une idée, ou posez une question."}
               </SheetDescription>
             </div>
           </div>
+          {CRM_MODE_ENABLED && (
+            <ToggleGroup
+              type="single"
+              value={mode}
+              onValueChange={handleModeChange}
+              className="justify-start mt-2 w-fit"
+              size="sm"
+            >
+              <ToggleGroupItem value="feedback" className="text-xs">
+                💬 Aide
+              </ToggleGroupItem>
+              <ToggleGroupItem value="crm-action" className="text-xs">
+                🛠 Action CRM
+              </ToggleGroupItem>
+            </ToggleGroup>
+          )}
         </SheetHeader>
 
         <div
@@ -169,12 +204,26 @@ export function NoshoAssistChat() {
         >
           {messages.length === 0 && (
             <div className="text-sm text-muted-foreground text-center py-8">
-              Comment puis-je vous aider ?
-              <br />
-              <span className="text-xs">
-                Tapez votre message ci-dessous, je vous poserai quelques
-                questions et je transmettrai votre demande à l'équipe.
-              </span>
+              {mode === "crm-action" ? (
+                <>
+                  Comment puis-je agir sur le CRM ?
+                  <br />
+                  <span className="text-xs">
+                    Ex : « Ajoute Marie Durand chez Hôpital Saint-Joseph » ou «
+                    Mets à jour le téléphone de Pasquali ». Je demanderai
+                    confirmation avant d'écrire en base.
+                  </span>
+                </>
+              ) : (
+                <>
+                  Comment puis-je vous aider ?
+                  <br />
+                  <span className="text-xs">
+                    Tapez votre message ci-dessous, je vous poserai quelques
+                    questions et je transmettrai votre demande à l'équipe.
+                  </span>
+                </>
+              )}
             </div>
           )}
 
@@ -249,7 +298,7 @@ export function NoshoAssistChat() {
         </div>
 
         <div className="border-t p-3">
-          {images.length > 0 && (
+          {mode === "feedback" && images.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-2">
               {images.map((img, i) => (
                 <div
@@ -273,7 +322,7 @@ export function NoshoAssistChat() {
               ))}
             </div>
           )}
-          {imageError && (
+          {mode === "feedback" && imageError && (
             <p className="text-[10px] text-destructive mb-1.5 px-1">
               {imageError}
             </p>
@@ -290,29 +339,35 @@ export function NoshoAssistChat() {
                 e.target.value = "";
               }}
             />
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={
-                isSending ||
-                !!submitted ||
-                isSubmitting ||
-                images.length >= MAX_ASSIST_IMAGES
-              }
-              className="shrink-0"
-              aria-label="Joindre une image"
-              title="Joindre une capture ou une image"
-            >
-              <ImagePlus className="w-4 h-4" />
-            </Button>
+            {mode === "feedback" && (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={
+                  isSending ||
+                  !!submitted ||
+                  isSubmitting ||
+                  images.length >= MAX_ASSIST_IMAGES
+                }
+                className="shrink-0"
+                aria-label="Joindre une image"
+                title="Joindre une capture ou une image"
+              >
+                <ImagePlus className="w-4 h-4" />
+              </Button>
+            )}
             <Textarea
               ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Comment puis-je vous aider ?"
+              placeholder={
+                mode === "crm-action"
+                  ? "Ex: Ajoute Marie Durand chez Hôpital Saint-Joseph"
+                  : "Comment puis-je vous aider ?"
+              }
               rows={2}
               className="resize-none min-h-[44px] max-h-32"
               disabled={isSending || !!submitted}
@@ -328,9 +383,20 @@ export function NoshoAssistChat() {
             </Button>
           </div>
           <p className="text-[10px] text-muted-foreground mt-1.5 px-1">
-            Entrée pour envoyer · Maj+Entrée pour aller à la ligne · Jusqu'à{" "}
-            {MAX_ASSIST_IMAGES} images (max{" "}
-            {MAX_ASSIST_IMAGE_SIZE / (1024 * 1024)} Mo)
+            {mode === "crm-action" ? (
+              <>
+                Entrée pour envoyer · Maj+Entrée pour aller à la ligne ·{" "}
+                <span className="text-amber-600 dark:text-amber-400">
+                  ⚠ écriture en base après confirmation
+                </span>
+              </>
+            ) : (
+              <>
+                Entrée pour envoyer · Maj+Entrée pour aller à la ligne · Jusqu'à{" "}
+                {MAX_ASSIST_IMAGES} images (max{" "}
+                {MAX_ASSIST_IMAGE_SIZE / (1024 * 1024)} Mo)
+              </>
+            )}
           </p>
         </div>
       </SheetContent>
