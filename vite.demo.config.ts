@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { visualizer } from "rollup-plugin-visualizer";
 import createHtmlPlugin from "vite-plugin-simple-html";
+import { VitePWA } from "vite-plugin-pwa";
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -21,6 +22,11 @@ export default defineConfig({
           mainScript: `demo/main.tsx`,
         },
       },
+    }),
+    VitePWA({
+      injectRegister: false,
+      manifest: false,
+      devOptions: { enabled: false },
     }),
   ],
   define: {

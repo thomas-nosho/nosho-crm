@@ -24,7 +24,7 @@ import { DealEdit } from "./DealEdit";
 import { DealEmpty } from "./DealEmpty";
 import { DealListContent, DealListViewProvider } from "./DealListContent";
 import { DealShow } from "./DealShow";
-import { OnlyMineInput } from "./OnlyMineInput";
+import { SalesFilterInput } from "./SalesFilterInput";
 
 export const DealListForView = () => {
   const { viewId } = useParams<{ viewId: string }>();
@@ -64,7 +64,7 @@ export const DealListForView = () => {
       optionText="label"
       optionValue="value"
     />,
-    <OnlyMineInput source="sales_id" alwaysOn />,
+    <SalesFilterInput source="sales_id" alwaysOn />,
   ];
 
   return (
@@ -76,7 +76,7 @@ export const DealListForView = () => {
     >
       <List
         resource="deals"
-        perPage={100}
+        perPage={1000}
         filter={{
           "archived_at@is": null,
           // Only apply the company_type constraint when the view actually

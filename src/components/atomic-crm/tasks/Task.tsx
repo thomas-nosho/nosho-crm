@@ -29,9 +29,11 @@ import { useIsMobile } from "@/hooks/use-mobile";
 export const Task = ({
   task,
   showContact,
+  showTime = true,
 }: {
   task: TData;
   showContact?: boolean;
+  showTime?: boolean;
 }) => {
   const isMobile = useIsMobile();
   const { taskTypes } = useConfigurationContext();
@@ -114,7 +116,12 @@ export const Task = ({
             </div>
             <div className="text-sm text-muted-foreground">
               due&nbsp;
-              <DateField source="due_date" record={task} showDate showTime />
+              <DateField
+                source="due_date"
+                record={task}
+                showDate
+                showTime={showTime}
+              />
               {showContact && (
                 <>
                   {" · "}

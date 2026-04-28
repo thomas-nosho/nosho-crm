@@ -17,7 +17,7 @@ import { DealEdit } from "./DealEdit";
 import { DealEmpty } from "./DealEmpty";
 import { DealListContent } from "./DealListContent";
 import { DealShow } from "./DealShow";
-import { OnlyMineInput } from "./OnlyMineInput";
+import { SalesFilterInput } from "./SalesFilterInput";
 
 const DealList = () => {
   const { identity } = useGetIdentity();
@@ -45,12 +45,12 @@ const DealList = () => {
       optionText="label"
       optionValue="value"
     />,
-    <OnlyMineInput source="sales_id" alwaysOn />,
+    <SalesFilterInput source="sales_id" alwaysOn />,
   ];
 
   return (
     <List
-      perPage={100}
+      perPage={1000}
       filter={{ "archived_at@is": null, "company_type@is": null }}
       title={false}
       sort={{ field: "index", order: "DESC" }}
