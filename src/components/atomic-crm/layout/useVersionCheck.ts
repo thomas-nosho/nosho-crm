@@ -36,7 +36,9 @@ async function nukeCachesAndReload() {
 export function useVersionCheck() {
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
 
-  const { updateServiceWorker } = useRegisterSW({
+  // Periodic SW update check keeps the precache warm in the background.
+  // The click handler does not depend on its result — see reload() below.
+  useRegisterSW({
     immediate: true,
     onRegisteredSW(_swUrl, registration) {
       if (!registration) return;
@@ -72,13 +74,11 @@ export function useVersionCheck() {
     };
   }, []);
 
-  const reload = useCallback(async () => {
-    try {
-      await updateServiceWorker(true);
-    } catch {
-      await nukeCachesAndReload();
-    }
-  }, [updateServiceWorker]);
+  // updateServiceWorker(true) silently no-ops when there is no waiting SW —
+  // a frequent race because version.json polling and SW update polling are
+  // unsynchronized intervals. Always nuke + reload so the spinner actually
+  // resolves into a fresh page.
+  const reload = useCallback(() => nukeCachesAndReload(), []);
 
   return {
     hasUpdate: latestVersion !== null,
