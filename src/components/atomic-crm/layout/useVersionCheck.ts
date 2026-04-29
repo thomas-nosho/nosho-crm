@@ -19,6 +19,11 @@ async function fetchRemoteVersion(): Promise<string | null> {
 }
 
 async function nukeCachesAndReload() {
+  // Safety net: if any of the SW/cache APIs hangs (rare but observed in the
+  // wild), reload anyway after 3s so the user is never stuck.
+  const fallbackTimer = window.setTimeout(() => {
+    window.location.reload();
+  }, 3000);
   try {
     if ("serviceWorker" in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
@@ -28,7 +33,10 @@ async function nukeCachesAndReload() {
       const keys = await caches.keys();
       await Promise.all(keys.map((k) => caches.delete(k)));
     }
+  } catch {
+    // Ignore — fallback timer or the finally reload will fire.
   } finally {
+    window.clearTimeout(fallbackTimer);
     window.location.reload();
   }
 }
