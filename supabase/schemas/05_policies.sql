@@ -67,3 +67,17 @@ create policy "Enable update for admins" on public.configuration for update to a
 
 -- Favicons excluded domains
 create policy "Enable access for authenticated users only" on public.favicons_excluded_domains to authenticated using (true) with check (true);
+
+-- Prospects
+alter table public.prospects enable row level security;
+create policy "Enable read access for authenticated users" on public.prospects for select to authenticated using (true);
+create policy "Enable insert for authenticated users only" on public.prospects for insert to authenticated with check (true);
+create policy "Enable update for authenticated users only" on public.prospects for update to authenticated using (true) with check (true);
+create policy "Prospects Delete Policy" on public.prospects for delete to authenticated using (true);
+
+-- Prospect Outreach
+alter table public.prospect_outreach enable row level security;
+create policy "Enable read access for authenticated users" on public.prospect_outreach for select to authenticated using (true);
+create policy "Enable insert for authenticated users only" on public.prospect_outreach for insert to authenticated with check (true);
+create policy "Enable update for authenticated users only" on public.prospect_outreach for update to authenticated using (true) with check (true);
+create policy "Outreach Delete Policy" on public.prospect_outreach for delete to authenticated using (true);
