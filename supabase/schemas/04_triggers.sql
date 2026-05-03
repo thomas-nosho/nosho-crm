@@ -72,6 +72,11 @@ create or replace trigger on_deal_notes_deleted_delete_note_attachments
     after delete on public.deal_notes
     for each row execute function public.cleanup_note_attachments();
 
+-- Auto-update prospects.updated_at on every row modification
+create or replace trigger prospects_set_updated_at
+    before update on public.prospects
+    for each row execute function public.set_updated_at();
+
 -- Auth triggers: sync auth.users to public.sales
 create or replace trigger on_auth_user_created
     after insert on auth.users
