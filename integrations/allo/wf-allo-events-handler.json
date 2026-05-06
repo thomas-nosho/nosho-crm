@@ -15,15 +15,16 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [240, 300],
-      "webhookId": "allo-events"
+      "webhookId": "allo-events",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "language": "javaScript",
-        "jsCode": "// Verify the HMAC-SHA256 signature Allo sends in the X-Allo-Signature header.\n// Body is read as raw bytes (Webhook node has rawBody=true) so we hash the\n// exact byte sequence Allo signed — re-stringifying the parsed JSON would\n// reorder keys and break the comparison.\nconst crypto = require('crypto');\n\nconst secret = $env.ALLO_WEBHOOK_SECRET;\nif (!secret) {\n  throw new Error('ALLO_WEBHOOK_SECRET env var is not set on the n8n container');\n}\n\nconst item = $input.first();\nconst headers = item.json.headers || {};\nconst signature = (headers['x-allo-signature'] || headers['X-Allo-Signature'] || '').trim();\nif (!signature) {\n  throw new Error('Missing X-Allo-Signature header');\n}\n\n// rawBody is exposed as a Buffer on item.binary.body when rawBody=true.\n// Fallback to body.* fields for n8n versions that surface raw text differently.\nconst raw = item.binary && item.binary.body && item.binary.body.data\n  ? Buffer.from(item.binary.body.data, 'base64')\n  : Buffer.from(typeof item.json.body === 'string' ? item.json.body : JSON.stringify(item.json.body || {}), 'utf8');\n\nconst expected = crypto.createHmac('sha256', secret).update(raw).digest('hex');\n\nconst sigBuf = Buffer.from(signature.replace(/^sha256=/, ''), 'hex');\nconst expBuf = Buffer.from(expected, 'hex');\nif (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {\n  throw new Error('Invalid HMAC signature');\n}\n\nlet body;\ntry {\n  body = JSON.parse(raw.toString('utf8'));\n} catch (e) {\n  throw new Error('Body is not valid JSON');\n}\n\nreturn [{ json: { event: body.event, payload: body } }];\n"
+        "jsCode": "// Verify Svix-format webhook signature sent by Allo.\n// Headers: webhook-id, webhook-timestamp, webhook-signature (\"v1,<base64sig>[ v1,<base64sig>...]\")\n// Signed content = `${id}.${timestamp}.${rawBody}` (utf8)\n// Secret format: whsec_<base64>. Decode base64 to get raw bytes, used as HMAC key.\nconst crypto = require('crypto');\n\nconst secret = $env.ALLO_WEBHOOK_SECRET;\nif (!secret) throw new Error('ALLO_WEBHOOK_SECRET env var is not set on the n8n container');\n\nconst item = $input.first();\nconst headers = item.json.headers || {};\nconst id = headers['webhook-id'];\nconst timestamp = headers['webhook-timestamp'];\nconst sigHeader = (headers['webhook-signature'] || '').trim();\nif (!id || !timestamp || !sigHeader) throw new Error('Missing Svix webhook headers (webhook-id / webhook-timestamp / webhook-signature)');\n\n// Reject if timestamp is more than 5 min off (replay protection).\nconst now = Math.floor(Date.now() / 1000);\nconst tsNum = parseInt(timestamp, 10);\nif (!Number.isFinite(tsNum) || Math.abs(now - tsNum) > 300) throw new Error('Webhook timestamp out of tolerance');\n\n// Raw body is on item.binary.body when Webhook node has rawBody=true.\nlet rawBuf;\nif (item.binary && item.binary.body && item.binary.body.data) {\n  rawBuf = Buffer.from(item.binary.body.data, 'base64');\n} else if (typeof item.json.body === 'string') {\n  rawBuf = Buffer.from(item.json.body, 'utf8');\n} else {\n  rawBuf = Buffer.from(JSON.stringify(item.json.body || {}), 'utf8');\n}\n\nconst signedContent = `${id}.${timestamp}.${rawBuf.toString('utf8')}`;\nconst secretBytes = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');\nconst expected = crypto.createHmac('sha256', secretBytes).update(signedContent).digest('base64');\n\n// Svix may send several space-separated v1,xxx values. Accept if any matches.\nconst signatures = sigHeader.split(' ').map(s => s.trim()).filter(Boolean);\nlet valid = false;\nfor (const sig of signatures) {\n  const m = sig.match(/^v1,(.+)$/);\n  if (!m) continue;\n  const sigBuf = Buffer.from(m[1], 'base64');\n  const expBuf = Buffer.from(expected, 'base64');\n  if (sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf)) { valid = true; break; }\n}\nif (!valid) throw new Error('Invalid Svix signature');\n\nlet parsed;\ntry { parsed = JSON.parse(rawBuf.toString('utf8')); } catch (e) { throw new Error('Body is not valid JSON: ' + e.message); }\n\n// Bridge: expose `event` so the downstream Switch keeps matching.\nreturn [{ json: { event: parsed.topic, payload: parsed } }];\n"
       },
       "id": "1f6c4d2e-6c1f-4f6a-8c80-c0a1ce2c0002",
-      "name": "Verify HMAC",
+      "name": "Verify Svix signature",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [460, 300]
@@ -82,7 +83,7 @@
       "credentials": {
         "postgres": {
           "id": "REPLACE_WITH_NOSHO_CRM_SUPABASE_CRED_ID",
-          "name": "Supabase nosho-crm (postgres)"
+          "name": "Supabase nosho-crm (postgres pooler)"
         }
       }
     },
@@ -120,14 +121,14 @@
       "main": [
         [
           {
-            "node": "Verify HMAC",
+            "node": "Verify Svix signature",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Verify HMAC": {
+    "Verify Svix signature": {
       "main": [
         [
           {
