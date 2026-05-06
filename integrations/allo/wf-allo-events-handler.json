@@ -21,10 +21,10 @@
     {
       "parameters": {
         "language": "javaScript",
-        "jsCode": "// Verify Svix-format webhook signature sent by Allo.\n// Headers: webhook-id, webhook-timestamp, webhook-signature (\"v1,<base64sig>[ v1,<base64sig>...]\")\n// Signed content = `${id}.${timestamp}.${rawBody}` (utf8)\n// Secret format: whsec_<base64>. Decode base64 to get raw bytes, used as HMAC key.\nconst crypto = require('crypto');\n\nconst secret = $env.ALLO_WEBHOOK_SECRET;\nif (!secret) throw new Error('ALLO_WEBHOOK_SECRET env var is not set on the n8n container');\n\nconst item = $input.first();\nconst headers = item.json.headers || {};\nconst id = headers['webhook-id'];\nconst timestamp = headers['webhook-timestamp'];\nconst sigHeader = (headers['webhook-signature'] || '').trim();\nif (!id || !timestamp || !sigHeader) throw new Error('Missing Svix webhook headers (webhook-id / webhook-timestamp / webhook-signature)');\n\n// Reject if timestamp is more than 5 min off (replay protection).\nconst now = Math.floor(Date.now() / 1000);\nconst tsNum = parseInt(timestamp, 10);\nif (!Number.isFinite(tsNum) || Math.abs(now - tsNum) > 300) throw new Error('Webhook timestamp out of tolerance');\n\n// Raw body is on item.binary.body when Webhook node has rawBody=true.\nlet rawBuf;\nif (item.binary && item.binary.body && item.binary.body.data) {\n  rawBuf = Buffer.from(item.binary.body.data, 'base64');\n} else if (typeof item.json.body === 'string') {\n  rawBuf = Buffer.from(item.json.body, 'utf8');\n} else {\n  rawBuf = Buffer.from(JSON.stringify(item.json.body || {}), 'utf8');\n}\n\nconst signedContent = `${id}.${timestamp}.${rawBuf.toString('utf8')}`;\nconst secretBytes = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');\nconst expected = crypto.createHmac('sha256', secretBytes).update(signedContent).digest('base64');\n\n// Svix may send several space-separated v1,xxx values. Accept if any matches.\nconst signatures = sigHeader.split(' ').map(s => s.trim()).filter(Boolean);\nlet valid = false;\nfor (const sig of signatures) {\n  const m = sig.match(/^v1,(.+)$/);\n  if (!m) continue;\n  const sigBuf = Buffer.from(m[1], 'base64');\n  const expBuf = Buffer.from(expected, 'base64');\n  if (sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf)) { valid = true; break; }\n}\nif (!valid) throw new Error('Invalid Svix signature');\n\nlet parsed;\ntry { parsed = JSON.parse(rawBuf.toString('utf8')); } catch (e) { throw new Error('Body is not valid JSON: ' + e.message); }\n\n// Bridge: expose `event` so the downstream Switch keeps matching.\nreturn [{ json: { event: parsed.topic, payload: parsed } }];\n"
+        "jsCode": "// Phase 1: Svix signature verification skipped.\n// Reason: n8n's task-runner sandbox doesn't expose item.binary (rawBody) to Code\n// nodes — only the parsed JSON. Re-stringifying loses byte-level fidelity\n// (2865 vs 2867 bytes observed) so HMAC over reconstructed text won't match.\n// Phase 2 TODO: verify webhook-signature header (HMAC-SHA256 over\n// `${webhook-id}.${webhook-timestamp}.${rawBody}` with secret\n// $env.ALLO_WEBHOOK_SECRET, format whsec_<base64>) once n8n runners are\n// configured to forward raw body bytes, OR move verification to a Workflow\n// expression node that runs in-process.\n//\n// For now we trust:\n//   1. URL obscurity (https://n8n.nosho.cc/webhook/allo-events — non-guessable)\n//   2. HTTPS-only transport\n//   3. Allo originates from Cloudflare IPs (cf-connecting-ip header on every call)\n\nconst item = $input.first();\nconst parsed = item.json.body;\nif (!parsed || typeof parsed !== 'object') {\n  throw new Error('Webhook body is not a JSON object');\n}\nreturn [{ json: { event: parsed.topic, payload: parsed } }];\n"
       },
       "id": "1f6c4d2e-6c1f-4f6a-8c80-c0a1ce2c0002",
-      "name": "Verify Svix signature",
+      "name": "Parse Allo payload (phase 1: no sig verify)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [460, 300]
@@ -121,14 +121,14 @@
       "main": [
         [
           {
-            "node": "Verify Svix signature",
+            "node": "Parse Allo payload (phase 1: no sig verify)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Verify Svix signature": {
+    "Parse Allo payload (phase 1: no sig verify)": {
       "main": [
         [
           {
