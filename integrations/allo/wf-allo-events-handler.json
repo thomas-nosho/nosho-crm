@@ -1,0 +1,180 @@
+{
+  "name": "Allo events handler (phase 1: calls)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "allo-events",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "1f6c4d2e-6c1f-4f6a-8c80-c0a1ce2c0001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "allo-events"
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Verify the HMAC-SHA256 signature Allo sends in the X-Allo-Signature header.\n// Body is read as raw bytes (Webhook node has rawBody=true) so we hash the\n// exact byte sequence Allo signed — re-stringifying the parsed JSON would\n// reorder keys and break the comparison.\nconst crypto = require('crypto');\n\nconst secret = $env.ALLO_WEBHOOK_SECRET;\nif (!secret) {\n  throw new Error('ALLO_WEBHOOK_SECRET env var is not set on the n8n container');\n}\n\nconst item = $input.first();\nconst headers = item.json.headers || {};\nconst signature = (headers['x-allo-signature'] || headers['X-Allo-Signature'] || '').trim();\nif (!signature) {\n  throw new Error('Missing X-Allo-Signature header');\n}\n\n// rawBody is exposed as a Buffer on item.binary.body when rawBody=true.\n// Fallback to body.* fields for n8n versions that surface raw text differently.\nconst raw = item.binary && item.binary.body && item.binary.body.data\n  ? Buffer.from(item.binary.body.data, 'base64')\n  : Buffer.from(typeof item.json.body === 'string' ? item.json.body : JSON.stringify(item.json.body || {}), 'utf8');\n\nconst expected = crypto.createHmac('sha256', secret).update(raw).digest('hex');\n\nconst sigBuf = Buffer.from(signature.replace(/^sha256=/, ''), 'hex');\nconst expBuf = Buffer.from(expected, 'hex');\nif (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {\n  throw new Error('Invalid HMAC signature');\n}\n\nlet body;\ntry {\n  body = JSON.parse(raw.toString('utf8'));\n} catch (e) {\n  throw new Error('Body is not valid JSON');\n}\n\nreturn [{ json: { event: body.event, payload: body } }];\n"
+      },
+      "id": "1f6c4d2e-6c1f-4f6a-8c80-c0a1ce2c0002",
+      "name": "Verify HMAC",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event }}",
+                    "rightValue": "call.completed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "call.completed"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "1f6c4d2e-6c1f-4f6a-8c80-c0a1ce2c0003",
+      "name": "Switch on event type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select public.process_allo_call($1::jsonb) as result",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify($json.payload) }}"
+        }
+      },
+      "id": "1f6c4d2e-6c1f-4f6a-8c80-c0a1ce2c0004",
+      "name": "Postgres: process_allo_call",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [920, 220],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_NOSHO_CRM_SUPABASE_CRED_ID",
+          "name": "Supabase nosho-crm (postgres)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, result: $json.result } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "1f6c4d2e-6c1f-4f6a-8c80-c0a1ce2c0005",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1160, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, ignored: $json.event } }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "1f6c4d2e-6c1f-4f6a-8c80-c0a1ce2c0006",
+      "name": "Respond 202 (ignored)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 420]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify HMAC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify HMAC": {
+      "main": [
+        [
+          {
+            "node": "Switch on event type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch on event type": {
+      "main": [
+        [
+          {
+            "node": "Postgres: process_allo_call",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 202 (ignored)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres: process_allo_call": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [{ "name": "allo-sync" }]
+}

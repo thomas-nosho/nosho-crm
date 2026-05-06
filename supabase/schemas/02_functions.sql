@@ -460,3 +460,184 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+-- Phone normalizer used by the Allo sync to match phone_jsonb numbers
+-- regardless of input format (+33XXXXXXXXX, 0XXXXXXXXX, 33XXXXXXXXX, …).
+CREATE OR REPLACE FUNCTION "public"."allo_normalize_phone"("p" text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET "search_path" TO ''
+    AS $$
+  select case
+    when p is null then null
+    when length(regexp_replace(p, '\D', '', 'g')) < 9 then null
+    else right(regexp_replace(p, '\D', '', 'g'), 9)
+  end
+$$;
+
+-- Atomic, idempotent processor for Allo `call.completed` webhook events.
+-- See migrations/20260506120000_allo_sync_phase1.sql for the full contract.
+CREATE OR REPLACE FUNCTION "public"."process_allo_call"("p_payload" jsonb) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  v_data            jsonb := coalesce(p_payload -> 'data', p_payload);
+  v_call_id         text  := v_data ->> 'call_id';
+  v_direction       text  := lower(coalesce(v_data ->> 'direction', 'inbound'));
+  v_from            text  := v_data ->> 'from';
+  v_to              text  := v_data ->> 'to';
+  v_line_phone      text  := v_data ->> 'line_phone';
+  v_allo_contact_id text  := v_data ->> 'contact_id';
+  v_external_phone  text;
+  v_external_norm   text;
+  v_sales_id        bigint;
+  v_contact_id      bigint;
+  v_deal_id         bigint;
+  v_lead_tag_id     bigint;
+  v_existing        public.call_logs%rowtype;
+  v_inserted_id     bigint;
+  v_was_inserted    boolean := false;
+  v_contact_created boolean := false;
+begin
+  if v_call_id is null or v_call_id = '' then
+    raise exception 'process_allo_call: payload missing data.call_id';
+  end if;
+
+  select * into v_existing from public.call_logs where allo_call_id = v_call_id;
+  if found then
+    return jsonb_build_object(
+      'call_log_id',  v_existing.id,
+      'contact_id',   v_existing.contact_id,
+      'sales_id',     v_existing.sales_id,
+      'deal_id',      v_existing.deal_id,
+      'inserted',     false,
+      'contact_created', false
+    );
+  end if;
+
+  if v_line_phone is null or v_line_phone = '' then
+    v_line_phone := case when v_direction = 'outbound' then v_from else v_to end;
+  end if;
+
+  select lo.sales_id into v_sales_id
+    from public.allo_line_owners lo
+   where public.allo_normalize_phone(lo.allo_phone_number)
+       = public.allo_normalize_phone(v_line_phone)
+   limit 1;
+
+  v_external_phone := case when v_direction = 'outbound' then v_to else v_from end;
+  v_external_norm  := public.allo_normalize_phone(v_external_phone);
+
+  if v_allo_contact_id is not null and v_allo_contact_id <> '' then
+    select acl.contact_id into v_contact_id
+      from public.allo_contact_links acl
+     where acl.allo_contact_id = v_allo_contact_id
+     limit 1;
+  end if;
+
+  if v_contact_id is null and v_external_norm is not null then
+    select c.id into v_contact_id
+      from public.contacts c
+      cross join lateral jsonb_array_elements(coalesce(c.phone_jsonb, '[]'::jsonb)) as phones(phone_obj)
+     where public.allo_normalize_phone(phones.phone_obj ->> 'number') = v_external_norm
+     order by c.id
+     limit 1;
+  end if;
+
+  if v_contact_id is null then
+    select id into v_lead_tag_id from public.tags where name = 'lead-from-allo' limit 1;
+
+    insert into public.contacts (
+      first_name,
+      last_name,
+      sales_id,
+      phone_jsonb,
+      tags,
+      first_seen,
+      last_seen,
+      _sync_origin
+    ) values (
+      'Allo',
+      coalesce(v_external_phone, 'Unknown'),
+      v_sales_id,
+      case
+        when v_external_phone is null then '[]'::jsonb
+        else jsonb_build_array(jsonb_build_object('number', v_external_phone, 'type', 'Mobile'))
+      end,
+      case when v_lead_tag_id is null then '{}'::bigint[] else array[v_lead_tag_id] end,
+      coalesce((v_data ->> 'started_at')::timestamptz, now()),
+      coalesce((v_data ->> 'ended_at')::timestamptz, (v_data ->> 'started_at')::timestamptz, now()),
+      'allo'
+    )
+    returning id into v_contact_id;
+
+    v_contact_created := true;
+  end if;
+
+  if v_allo_contact_id is not null and v_allo_contact_id <> '' then
+    insert into public.allo_contact_links (contact_id, allo_contact_id)
+      values (v_contact_id, v_allo_contact_id)
+      on conflict do nothing;
+  end if;
+
+  select d.id into v_deal_id
+    from public.deals d
+   where d.archived_at is null
+     and d.contact_ids @> array[v_contact_id]
+   order by d.updated_at desc, d.id desc
+   limit 1;
+
+  insert into public.call_logs (
+    allo_call_id,
+    direction,
+    from_number,
+    to_number,
+    line_phone,
+    status,
+    duration_seconds,
+    started_at,
+    ended_at,
+    recording_url,
+    ai_summary,
+    transcript,
+    contact_id,
+    sales_id,
+    deal_id,
+    raw_payload
+  ) values (
+    v_call_id,
+    case when v_direction in ('inbound', 'outbound') then v_direction else 'inbound' end,
+    v_from,
+    v_to,
+    v_line_phone,
+    v_data ->> 'status',
+    nullif(v_data ->> 'duration_seconds', '')::integer,
+    nullif(v_data ->> 'started_at', '')::timestamptz,
+    nullif(v_data ->> 'ended_at', '')::timestamptz,
+    v_data ->> 'recording_url',
+    v_data ->> 'ai_summary',
+    v_data ->> 'transcript',
+    v_contact_id,
+    v_sales_id,
+    v_deal_id,
+    p_payload
+  )
+  on conflict (allo_call_id) do nothing
+  returning id into v_inserted_id;
+
+  v_was_inserted := v_inserted_id is not null;
+
+  if v_inserted_id is null then
+    select id into v_inserted_id from public.call_logs where allo_call_id = v_call_id;
+  end if;
+
+  return jsonb_build_object(
+    'call_log_id',     v_inserted_id,
+    'contact_id',      v_contact_id,
+    'sales_id',        v_sales_id,
+    'deal_id',         v_deal_id,
+    'inserted',        v_was_inserted,
+    'contact_created', v_contact_created
+  );
+end;
+$$;
