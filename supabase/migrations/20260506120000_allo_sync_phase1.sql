@@ -167,6 +167,7 @@ $$;
 
 grant all on function public.allo_normalize_phone(text) to authenticated;
 grant all on function public.allo_normalize_phone(text) to service_role;
+revoke all on function public.allo_normalize_phone(text) from public;
 
 --
 -- 10. process_allo_call(payload jsonb) → jsonb
@@ -384,6 +385,10 @@ $$;
 grant all on function public.process_allo_call(jsonb) to service_role;
 -- authenticated keeps it reachable from the dashboard SQL editor for ops.
 grant all on function public.process_allo_call(jsonb) to authenticated;
+-- Block PostgREST's anon role: SECURITY DEFINER functions inherit
+-- EXECUTE-to-PUBLIC at creation time, which would expose this RPC at
+-- /rest/v1/rpc/process_allo_call to unauthenticated callers.
+revoke all on function public.process_allo_call(jsonb) from public;
 
 --
 -- Sanity checks (run manually after migration; commented to keep the
