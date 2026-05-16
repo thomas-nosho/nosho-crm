@@ -81,3 +81,31 @@ create policy "Enable read access for authenticated users" on public.prospect_ou
 create policy "Enable insert for authenticated users only" on public.prospect_outreach for insert to authenticated with check (true);
 create policy "Enable update for authenticated users only" on public.prospect_outreach for update to authenticated using (true) with check (true);
 create policy "Outreach Delete Policy" on public.prospect_outreach for delete to authenticated using (true);
+
+-- Allo Line Owners
+alter table public.allo_line_owners enable row level security;
+create policy "Enable read access for authenticated users" on public.allo_line_owners for select to authenticated using (true);
+create policy "Enable insert for authenticated users only" on public.allo_line_owners for insert to authenticated with check (true);
+create policy "Enable update for authenticated users only" on public.allo_line_owners for update to authenticated using (true) with check (true);
+create policy "Allo Line Owners Delete Policy" on public.allo_line_owners for delete to authenticated using (true);
+
+-- Allo Contact Links
+alter table public.allo_contact_links enable row level security;
+create policy "Enable read access for authenticated users" on public.allo_contact_links for select to authenticated using (true);
+create policy "Enable insert for authenticated users only" on public.allo_contact_links for insert to authenticated with check (true);
+create policy "Enable update for authenticated users only" on public.allo_contact_links for update to authenticated using (true) with check (true);
+create policy "Allo Contact Links Delete Policy" on public.allo_contact_links for delete to authenticated using (true);
+
+-- Call Logs
+alter table public.call_logs enable row level security;
+create policy "Enable read access for authenticated users" on public.call_logs for select to authenticated using (true);
+create policy "Enable insert for authenticated users only" on public.call_logs for insert to authenticated with check (true);
+create policy "Enable update for authenticated users only" on public.call_logs for update to authenticated using (true) with check (true);
+create policy "Call Logs Delete Policy" on public.call_logs for delete to authenticated using (true);
+
+-- SMS Messages
+alter table public.sms_messages enable row level security;
+create policy "Enable read access for authenticated users" on public.sms_messages for select to authenticated using (true);
+create policy "Enable insert for authenticated users only" on public.sms_messages for insert to authenticated with check (true);
+create policy "Enable update for authenticated users only" on public.sms_messages for update to authenticated using (true) with check (true);
+create policy "SMS Messages Delete Policy" on public.sms_messages for delete to authenticated using (true);

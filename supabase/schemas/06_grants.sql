@@ -56,6 +56,14 @@ grant all on function public.merge_contacts(bigint, bigint) to service_role;
 grant all on function public.set_sales_id_default() to authenticated;
 grant all on function public.set_sales_id_default() to service_role;
 
+grant all on function public.allo_normalize_phone(text) to authenticated;
+grant all on function public.allo_normalize_phone(text) to service_role;
+revoke all on function public.allo_normalize_phone(text) from public;
+
+grant all on function public.process_allo_call(jsonb) to authenticated;
+grant all on function public.process_allo_call(jsonb) to service_role;
+revoke all on function public.process_allo_call(jsonb) from public;
+
 -- Table grants
 -- The anon role intentionally receives NO table privileges. Browser clients
 -- authenticate before reading data; unauthenticated public access is blocked
@@ -90,6 +98,18 @@ grant all on table public.configuration to service_role;
 
 grant all on table public.favicons_excluded_domains to authenticated;
 grant all on table public.favicons_excluded_domains to service_role;
+
+grant all on table public.allo_line_owners to authenticated;
+grant all on table public.allo_line_owners to service_role;
+
+grant all on table public.allo_contact_links to authenticated;
+grant all on table public.allo_contact_links to service_role;
+
+grant all on table public.call_logs to authenticated;
+grant all on table public.call_logs to service_role;
+
+grant all on table public.sms_messages to authenticated;
+grant all on table public.sms_messages to service_role;
 
 -- View grants
 grant all on table public.activity_log to authenticated;
