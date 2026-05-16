@@ -1,0 +1,181 @@
+{
+  "name": "Allo events handler (phase 1: calls)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "allo-events",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "1f6c4d2e-6c1f-4f6a-8c80-c0a1ce2c0001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "allo-events",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Phase 1: Svix signature verification skipped.\n// Reason: n8n's task-runner sandbox doesn't expose item.binary (rawBody) to Code\n// nodes — only the parsed JSON. Re-stringifying loses byte-level fidelity\n// (2865 vs 2867 bytes observed) so HMAC over reconstructed text won't match.\n// Phase 2 TODO: verify webhook-signature header (HMAC-SHA256 over\n// `${webhook-id}.${webhook-timestamp}.${rawBody}` with secret\n// $env.ALLO_WEBHOOK_SECRET, format whsec_<base64>) once n8n runners are\n// configured to forward raw body bytes, OR move verification to a Workflow\n// expression node that runs in-process.\n//\n// For now we trust:\n//   1. URL obscurity (https://n8n.nosho.cc/webhook/allo-events — non-guessable)\n//   2. HTTPS-only transport\n//   3. Allo originates from Cloudflare IPs (cf-connecting-ip header on every call)\n\nconst item = $input.first();\nconst parsed = item.json.body;\nif (!parsed || typeof parsed !== 'object') {\n  throw new Error('Webhook body is not a JSON object');\n}\nreturn [{ json: { event: parsed.topic, payload: parsed } }];\n"
+      },
+      "id": "1f6c4d2e-6c1f-4f6a-8c80-c0a1ce2c0002",
+      "name": "Parse Allo payload (phase 1: no sig verify)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event }}",
+                    "rightValue": "call.completed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "call.completed"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "1f6c4d2e-6c1f-4f6a-8c80-c0a1ce2c0003",
+      "name": "Switch on event type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select public.process_allo_call($1::jsonb) as result",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify($json.payload) }}"
+        }
+      },
+      "id": "1f6c4d2e-6c1f-4f6a-8c80-c0a1ce2c0004",
+      "name": "Postgres: process_allo_call",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [920, 220],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_NOSHO_CRM_SUPABASE_CRED_ID",
+          "name": "Supabase nosho-crm (postgres pooler)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, result: $json.result } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "1f6c4d2e-6c1f-4f6a-8c80-c0a1ce2c0005",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1160, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, ignored: $json.event } }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "1f6c4d2e-6c1f-4f6a-8c80-c0a1ce2c0006",
+      "name": "Respond 202 (ignored)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 420]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Allo payload (phase 1: no sig verify)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Allo payload (phase 1: no sig verify)": {
+      "main": [
+        [
+          {
+            "node": "Switch on event type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch on event type": {
+      "main": [
+        [
+          {
+            "node": "Postgres: process_allo_call",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 202 (ignored)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres: process_allo_call": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [{ "name": "allo-sync" }]
+}
