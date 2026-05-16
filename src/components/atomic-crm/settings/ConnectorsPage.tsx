@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useDataProvider, useNotify } from "ra-core";
 import {
   CheckCircle2,
@@ -15,6 +15,9 @@ import {
   EyeOff,
   Save,
   Trash2,
+  Phone,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +40,7 @@ import type { GooglePreferences } from "../google/types";
 const CONNECTORS = [
   { id: "google", label: "Google Workspace" },
   { id: "dropcontact", label: "Dropcontact" },
+  { id: "allo", label: "Allo" },
   { id: "lemlist", label: "Lemlist" },
 ];
 
@@ -69,6 +73,8 @@ export const ConnectorsPage = () => {
         <GoogleConnectorCard />
 
         <DropcontactConnectorCard />
+
+        <AlloConnectorCard />
 
         <ComingSoonCard
           id="lemlist"
@@ -514,6 +520,285 @@ const DropcontactConnectorCard = () => {
                 Bouton <span className="font-medium">✨ Enrichir</span>{" "}
                 disponible sur chaque fiche contact et société.
               </p>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+// ── Allo Connector ────────────────────────────────────────────────
+
+const AlloConnectorCard = () => {
+  const config = useConfigurationContext();
+  const updateConfig = useConfigurationUpdater();
+  const dataProvider = useDataProvider<CrmDataProvider>();
+  const notify = useNotify();
+
+  const [apiKey, setApiKey] = useState(config.alloApiKey ?? "");
+  const [showKey, setShowKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [status, setStatus] = useState<{
+    mapped_count: number;
+    last_synced_at: string | null;
+  } | null>(null);
+  const [team, setTeam] = useState<string | null>(null);
+
+  const connected = Boolean(config.alloApiKey);
+
+  // Load sync status when connected.
+  useEffect(() => {
+    if (!connected) return;
+    dataProvider
+      .getAlloSyncStatus()
+      .then(setStatus)
+      .catch(() => undefined);
+  }, [connected, dataProvider]);
+
+  const handleSave = useCallback(async () => {
+    const trimmed = apiKey.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    try {
+      const result = await dataProvider.testAlloConnection(trimmed);
+      if (!result.ok) {
+        notify(`Clé invalide${result.message ? ` : ${result.message}` : ""}`, {
+          type: "error",
+        });
+        return;
+      }
+      updateConfig({ ...config, alloApiKey: trimmed });
+      setTeam(result.team?.name ?? null);
+      notify("Clé API Allo enregistrée", { type: "success" });
+    } catch (e) {
+      notify(`Erreur : ${e instanceof Error ? e.message : String(e)}`, {
+        type: "error",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }, [apiKey, config, updateConfig, dataProvider, notify]);
+
+  const handleDisconnect = useCallback(() => {
+    setApiKey("");
+    setStatus(null);
+    setTeam(null);
+    updateConfig({ ...config, alloApiKey: undefined });
+    notify("Allo déconnecté");
+  }, [config, updateConfig, notify]);
+
+  const handleTest = useCallback(async () => {
+    const trimmed = apiKey.trim();
+    if (!trimmed) return;
+    setTesting(true);
+    try {
+      const result = await dataProvider.testAlloConnection(trimmed);
+      if (result.ok) {
+        setTeam(result.team?.name ?? null);
+        notify(
+          `Connexion OK${result.team?.name ? ` — ${result.team.name}` : ""}`,
+          { type: "success" },
+        );
+      } else {
+        notify(`Échec : ${result.message ?? `HTTP ${result.status ?? "?"}`}`, {
+          type: "error",
+        });
+      }
+    } catch (e) {
+      notify(`Erreur : ${e instanceof Error ? e.message : String(e)}`, {
+        type: "error",
+      });
+    } finally {
+      setTesting(false);
+    }
+  }, [apiKey, dataProvider, notify]);
+
+  const handleSync = useCallback(async () => {
+    if (!config.alloApiKey) return;
+    setSyncing(true);
+    try {
+      const result = await dataProvider.syncAlloContacts(config.alloApiKey);
+      const summary = `${result.pushed_created} créé(s) sur Allo, ${result.pushed_updated} mis à jour · ${result.pulled_created} importé(s) du CRM, ${result.pulled_updated} mis à jour`;
+      notify(`Synchronisation terminée — ${summary}`, { type: "success" });
+      if (result.errors.length > 0) {
+        console.warn("Allo sync errors:", result.errors);
+      }
+      const next = await dataProvider.getAlloSyncStatus();
+      setStatus(next);
+    } catch (e) {
+      notify(
+        `Erreur de synchronisation : ${e instanceof Error ? e.message : String(e)}`,
+        { type: "error" },
+      );
+    } finally {
+      setSyncing(false);
+    }
+  }, [config.alloApiKey, dataProvider, notify]);
+
+  return (
+    <Card id="allo">
+      <CardContent className="space-y-5">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-white border flex items-center justify-center">
+              <Phone className="w-5 h-5 text-foreground" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold">Allo</h2>
+              <p className="text-sm text-muted-foreground">
+                Téléphonie & enregistrement d'appels
+              </p>
+            </div>
+          </div>
+          {connected ? (
+            <Badge
+              variant="outline"
+              className="text-green-700 border-green-300 bg-green-50 dark:text-green-400 dark:border-green-800 dark:bg-green-950"
+            >
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Connecté
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-muted-foreground">
+              Non connecté
+            </Badge>
+          )}
+        </div>
+
+        <Separator />
+
+        <p className="text-sm text-muted-foreground">
+          Synchronisez vos contacts entre le CRM et la plateforme Allo (numéros
+          de téléphone, noms, emails). La synchronisation est bidirectionnelle :
+          les contacts CRM avec un numéro sont poussés vers Allo, et les
+          contacts Allo sont importés ou enrichis dans le CRM.
+        </p>
+
+        {/* API key input */}
+        <div className="space-y-2">
+          <Label
+            htmlFor="allo-api-key"
+            className="text-sm font-medium flex items-center gap-1.5"
+          >
+            <Key className="w-3.5 h-3.5" />
+            Clé API
+          </Label>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Input
+                id="allo-api-key"
+                type={showKey ? "text" : "password"}
+                placeholder="Votre clé API Allo…"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                className="pr-9"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                tabIndex={-1}
+              >
+                {showKey ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleTest}
+              disabled={testing || !apiKey.trim()}
+              title="Tester la connexion"
+            >
+              {testing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Plug className="w-4 h-4" />
+              )}
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={saving || !apiKey.trim()}
+            >
+              {saving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+            </Button>
+            {connected && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDisconnect}
+                className="text-destructive hover:text-destructive"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Créez une clé avec le scope <code>CONTACTS_READ_WRITE</code> dans{" "}
+            <a
+              href="https://app.withallo.com/settings/api-keys"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:no-underline inline-flex items-center gap-0.5"
+            >
+              app.withallo.com
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </p>
+        </div>
+
+        {connected && (
+          <>
+            <Separator />
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-sm font-medium">Synchronisation</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {status?.mapped_count
+                      ? `${status.mapped_count} contact${status.mapped_count > 1 ? "s" : ""} relié${status.mapped_count > 1 ? "s" : ""}`
+                      : "Aucun contact synchronisé"}
+                    {status?.last_synced_at
+                      ? ` · dernière synchro ${new Date(status.last_synced_at).toLocaleString("fr-FR")}`
+                      : ""}
+                    {team ? ` · équipe ${team}` : ""}
+                  </p>
+                </div>
+                <Button size="sm" onClick={handleSync} disabled={syncing}>
+                  {syncing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                      Synchronisation…
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-1.5" />
+                      Synchroniser maintenant
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground flex gap-2">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>
+                  Seuls les contacts CRM ayant un numéro de téléphone sont
+                  envoyés vers Allo. Les correspondances utilisent le numéro
+                  normalisé (E.164) pour fusionner sans doublon.
+                </span>
+              </div>
             </div>
           </>
         )}

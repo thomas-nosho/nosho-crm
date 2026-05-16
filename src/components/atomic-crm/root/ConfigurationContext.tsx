@@ -31,6 +31,7 @@ export interface ConfigurationContextValue {
   googleWorkplaceDomain?: string;
   disableEmailPasswordAuthentication?: boolean;
   dropcontactApiKey?: string;
+  alloApiKey?: string;
 }
 
 export const useConfigurationContext = () => {

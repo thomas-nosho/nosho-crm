@@ -455,8 +455,65 @@ const getDataProviderWithCustomMethods = () => {
       if (error) throw new Error("Failed to fetch contact calendar events");
       return data!.data;
     },
+
+    // ── Allo Integration ────────────────────────────────────────────
+    async testAlloConnection(apiKey: string) {
+      const { data, error } = await getSupabaseClient().functions.invoke<{
+        data: AlloTestResult;
+      }>("allo-sync", {
+        method: "POST",
+        body: { action: "test", apiKey },
+      });
+      if (error) throw new Error("Failed to test Allo connection");
+      return data!.data;
+    },
+    async syncAlloContacts(apiKey: string) {
+      const { data, error } = await getSupabaseClient().functions.invoke<{
+        data: AlloSyncResult;
+      }>("allo-sync", {
+        method: "POST",
+        body: { action: "sync", apiKey },
+      });
+      if (error) throw new Error("Failed to sync Allo contacts");
+      return data!.data;
+    },
+    async getAlloSyncStatus() {
+      const { data, error } = await getSupabaseClient().functions.invoke<{
+        data: AlloSyncStatus;
+      }>("allo-sync", {
+        method: "POST",
+        body: { action: "status" },
+      });
+      if (error) throw new Error("Failed to get Allo sync status");
+      return data!.data;
+    },
   } satisfies DataProvider;
 };
+
+export interface AlloTestResult {
+  ok: boolean;
+  status?: number;
+  message?: string;
+  api_key_id?: string | null;
+  scopes?: string[];
+  team?: { id: string; name: string } | null;
+  rate_limits?: { read_per_second: number; write_per_second: number } | null;
+}
+
+export interface AlloSyncResult {
+  pushed_created: number;
+  pushed_updated: number;
+  pushed_skipped: number;
+  pulled_created: number;
+  pulled_updated: number;
+  pulled_skipped: number;
+  errors: string[];
+}
+
+export interface AlloSyncStatus {
+  mapped_count: number;
+  last_synced_at: string | null;
+}
 
 export type CrmDataProvider = ReturnType<
   typeof getDataProviderWithCustomMethods
