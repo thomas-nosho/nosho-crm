@@ -15,6 +15,14 @@ type Draft = {
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+  attachments?: AssistAttachment[];
+};
+
+type AssistAttachment = {
+  url: string;
+  name?: string;
+  type?: string;
+  size?: number;
 };
 
 type RequestBody = {
@@ -23,6 +31,7 @@ type RequestBody = {
   currentRoute?: string;
   userAgent?: string;
   transcript?: ChatMessage[];
+  attachments?: AssistAttachment[];
 };
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -45,6 +54,33 @@ function isValidDraft(d: unknown): d is Draft {
     draft.summary.length > 0 &&
     draft.ready === true
   );
+}
+
+function normalizeAttachments(value: unknown): AssistAttachment[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 12).flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const attachment = item as Record<string, unknown>;
+    if (typeof attachment.url !== "string" || !attachment.url) return [];
+    return [
+      {
+        url: attachment.url,
+        name:
+          typeof attachment.name === "string"
+            ? attachment.name.slice(0, 255)
+            : "",
+        type:
+          typeof attachment.type === "string"
+            ? attachment.type.slice(0, 100)
+            : "",
+        size:
+          typeof attachment.size === "number" &&
+          Number.isFinite(attachment.size)
+            ? attachment.size
+            : 0,
+      },
+    ];
+  });
 }
 
 async function handler(req: Request, user?: User): Promise<Response> {
@@ -94,8 +130,10 @@ async function handler(req: Request, user?: User): Promise<Response> {
     ? body.transcript.slice(-20).map((m) => ({
         role: m.role,
         content: typeof m.content === "string" ? m.content.slice(0, 4000) : "",
+        attachments: normalizeAttachments(m.attachments),
       }))
     : [];
+  const attachments = normalizeAttachments(body.attachments);
 
   const payload = {
     mode: "submit",
@@ -111,7 +149,9 @@ async function handler(req: Request, user?: User): Promise<Response> {
     context: {
       currentRoute: body.currentRoute ?? "",
       userAgent: body.userAgent ?? "",
+      attachments,
     },
+    attachments,
     transcript,
   };
 
@@ -146,10 +186,6 @@ async function handler(req: Request, user?: User): Promise<Response> {
   } catch {
     // ignore non-JSON responses
   }
-
-  console.log(
-    `[assist-submit] forwarded ${body.draft.type} from ${authorName}: "${body.draft.title}"`,
-  );
 
   return jsonResponse(200, { ok: true, issueUrl });
 }

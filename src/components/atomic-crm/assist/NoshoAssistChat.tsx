@@ -12,7 +12,11 @@ import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { useAssist } from "./assistStore";
-import { useAssistChat, type AssistMode } from "./useAssistChat";
+import {
+  useAssistChat,
+  type AssistAttachment,
+  type AssistMode,
+} from "./useAssistChat";
 
 const TYPE_LABEL: Record<"bug" | "feature" | "question", string> = {
   bug: "Bug",
@@ -76,6 +80,11 @@ export function NoshoAssistChat() {
     reset();
     setSubmitted(null);
     setInput("");
+    setImages((prev) => {
+      prev.forEach((img) => URL.revokeObjectURL(img.previewUrl));
+      return [];
+    });
+    setImageError(null);
   };
 
   // Revoke preview URLs when the component unmounts.
@@ -97,9 +106,19 @@ export function NoshoAssistChat() {
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || isSending) return;
-    setInput("");
-    await sendMessage(text);
+    if ((!text && images.length === 0) || isSending) return;
+    const sent = await sendMessage(
+      text,
+      mode === "feedback" ? images.map((img) => img.file) : [],
+    );
+    if (sent) {
+      setInput("");
+      setImages((prev) => {
+        prev.forEach((img) => URL.revokeObjectURL(img.previewUrl));
+        return [];
+      });
+      setImageError(null);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -228,7 +247,12 @@ export function NoshoAssistChat() {
           )}
 
           {messages.map((msg, i) => (
-            <MessageBubble key={i} role={msg.role} content={msg.content} />
+            <MessageBubble
+              key={i}
+              role={msg.role}
+              content={msg.content}
+              attachments={msg.attachments}
+            />
           ))}
 
           {isSending && (
@@ -376,7 +400,11 @@ export function NoshoAssistChat() {
               type="button"
               size="icon"
               onClick={handleSend}
-              disabled={!input.trim() || isSending || !!submitted}
+              disabled={
+                (!input.trim() && images.length === 0) ||
+                isSending ||
+                !!submitted
+              }
               className="shrink-0"
             >
               <Send className="w-4 h-4" />
@@ -407,9 +435,11 @@ export function NoshoAssistChat() {
 function MessageBubble({
   role,
   content,
+  attachments = [],
 }: {
   role: "user" | "assistant";
   content: string;
+  attachments?: AssistAttachment[];
 }) {
   // Strip the JSON fence from the assistant display - the parsed draft is
   // already shown as a structured card below the message stream.
@@ -433,6 +463,26 @@ function MessageBubble({
         )}
       >
         {display}
+        {attachments.length > 0 && (
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {attachments.map((attachment, index) => (
+              <a
+                key={`${attachment.url}-${index}`}
+                href={attachment.url}
+                target="_blank"
+                rel="noreferrer"
+                className="block overflow-hidden rounded-md border border-white/25 bg-black/10"
+                title={attachment.name}
+              >
+                <img
+                  src={attachment.url}
+                  alt={attachment.name || `Capture ${index + 1}`}
+                  className="h-24 w-full object-cover"
+                />
+              </a>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

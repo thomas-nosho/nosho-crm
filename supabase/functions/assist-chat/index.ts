@@ -19,9 +19,17 @@ type Draft = {
   ready: true;
 };
 
+type AssistAttachment = {
+  url: string;
+  name?: string;
+  type?: string;
+  size?: number;
+};
+
 type RequestBody = {
   sessionId?: string;
   message?: string;
+  attachments?: AssistAttachment[];
   context?: {
     currentRoute?: string;
   };
@@ -36,6 +44,33 @@ function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function normalizeAttachments(value: unknown): AssistAttachment[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 3).flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const attachment = item as Record<string, unknown>;
+    if (typeof attachment.url !== "string" || !attachment.url) return [];
+    return [
+      {
+        url: attachment.url,
+        name:
+          typeof attachment.name === "string"
+            ? attachment.name.slice(0, 255)
+            : "",
+        type:
+          typeof attachment.type === "string"
+            ? attachment.type.slice(0, 100)
+            : "",
+        size:
+          typeof attachment.size === "number" &&
+          Number.isFinite(attachment.size)
+            ? attachment.size
+            : 0,
+      },
+    ];
   });
 }
 
@@ -63,6 +98,7 @@ async function handler(req: Request, user?: User): Promise<Response> {
   if (!sessionId || !message) {
     return jsonResponse(400, { error: "sessionId and message are required" });
   }
+  const attachments = normalizeAttachments(body.attachments);
 
   // Resolve a human-readable author name from the sales table.
   let authorName = user?.email ?? "Unknown";
@@ -86,7 +122,8 @@ async function handler(req: Request, user?: User): Promise<Response> {
   const payload = {
     mode: "chat",
     sessionId,
-    message: message.slice(0, 4000),
+    message: message.slice(0, 8000),
+    attachments,
     author: {
       name: authorName,
       email: authorEmail,
@@ -94,6 +131,7 @@ async function handler(req: Request, user?: User): Promise<Response> {
     },
     context: {
       currentRoute: body.context?.currentRoute ?? "",
+      attachments,
     },
     source: "nosho-crm",
     submittedAt: new Date().toISOString(),
@@ -127,10 +165,6 @@ async function handler(req: Request, user?: User): Promise<Response> {
     console.error("[assist-chat] failed to parse n8n response:", e);
     return jsonResponse(502, { error: "Invalid response from n8n" });
   }
-
-  console.log(
-    `[assist-chat] ${authorName} (${sessionId}) — reply ${data?.reply?.length ?? 0} chars, draft=${data?.draft ? "yes" : "no"}`,
-  );
 
   return jsonResponse(200, {
     reply: data.reply ?? "",
