@@ -11,6 +11,7 @@ export type AssistMode = "feedback" | "crm-action";
 export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+  attachments?: AssistAttachment[];
 };
 
 export type AssistDraft = {
@@ -18,6 +19,13 @@ export type AssistDraft = {
   title: string;
   summary: string;
   ready: true;
+};
+
+export type AssistAttachment = {
+  url: string;
+  name: string;
+  type: string;
+  size: number;
 };
 
 type AssistChatResponse = {
@@ -35,6 +43,33 @@ type SubmitResponse = {
   issueNumber?: number;
 };
 
+export function formatAssistMessageWithAttachments(
+  message: string,
+  attachments: AssistAttachment[],
+): string {
+  if (attachments.length === 0) return message;
+  const attachmentList = attachments
+    .map((attachment, index) => {
+      const name = attachment.name || `Capture ${index + 1}`;
+      return `- ${name}: ${attachment.url}`;
+    })
+    .join("\n");
+  return `${message}\n\nImages jointes :\n${attachmentList}`;
+}
+
+export function buildDraftSummaryWithAttachments(
+  summary: string,
+  attachments: AssistAttachment[],
+): string {
+  if (attachments.length === 0) return summary;
+  return `${summary}\n\n---\n**Captures d'écran :**\n\n${attachments
+    .map((attachment, i) => {
+      const title = attachment.name || `Capture ${i + 1}`;
+      return `![${title}](${attachment.url})`;
+    })
+    .join("\n\n")}`;
+}
+
 function generateSessionId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return `nosho-${crypto.randomUUID()}`;
@@ -42,10 +77,10 @@ function generateSessionId(): string {
   return `nosho-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-async function uploadAssistImages(files: File[]): Promise<string[]> {
+async function uploadAssistImages(files: File[]): Promise<AssistAttachment[]> {
   if (files.length === 0) return [];
   const client = getSupabaseClient();
-  const urls: string[] = [];
+  const attachments: AssistAttachment[] = [];
   for (const file of files) {
     const ext = file.name.includes(".") ? `.${file.name.split(".").pop()}` : "";
     const path = `assist/${crypto.randomUUID()}${ext}`;
@@ -59,9 +94,14 @@ async function uploadAssistImages(files: File[]): Promise<string[]> {
     if (signErr || !signed?.signedUrl) {
       throw new Error(`Signature d'URL échouée : ${signErr?.message ?? ""}`);
     }
-    urls.push(signed.signedUrl);
+    attachments.push({
+      url: signed.signedUrl,
+      name: file.name,
+      type: file.type,
+      size: file.size,
+    });
   }
-  return urls;
+  return attachments;
 }
 
 async function sendCrmAction(
@@ -113,30 +153,43 @@ export function useAssistChat(mode: AssistMode = "feedback") {
   }, []);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, images?: File[]): Promise<boolean> => {
       const trimmed = text.trim();
-      if (!trimmed || isSending) return;
+      const imageFiles = images ?? [];
+      if ((!trimmed && imageFiles.length === 0) || isSending) return false;
 
       setError(null);
-      const userMessage: ChatMessage = { role: "user", content: trimmed };
-      setMessages((prev) => [...prev, userMessage]);
       setIsSending(true);
 
       try {
+        const attachments = await uploadAssistImages(imageFiles);
+        const userContent = trimmed || "Capture d'écran jointe.";
+        const userMessage: ChatMessage = {
+          role: "user",
+          content: userContent,
+          ...(attachments.length > 0 ? { attachments } : {}),
+        };
+        setMessages((prev) => [...prev, userMessage]);
+
         let reply = "";
         let nextDraft: AssistDraft | null = null;
 
         if (mode === "crm-action") {
-          const data = await sendCrmAction(trimmed, sessionIdRef.current);
+          const data = await sendCrmAction(userContent, sessionIdRef.current);
           reply = data.reply ?? "";
         } else {
+          const webhookMessage = formatAssistMessageWithAttachments(
+            userContent,
+            attachments,
+          );
           const { data, error: invokeError } =
             await getSupabaseClient().functions.invoke<AssistChatResponse>(
               "assist-chat",
               {
                 body: {
                   sessionId: sessionIdRef.current,
-                  message: trimmed,
+                  message: webhookMessage,
+                  attachments,
                   context: {
                     currentRoute:
                       typeof window !== "undefined"
@@ -160,8 +213,10 @@ export function useAssistChat(mode: AssistMode = "feedback") {
           setMessages((prev) => [...prev, assistantMessage]);
         }
         if (nextDraft) setDraft(nextDraft);
+        return true;
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
+        return false;
       } finally {
         setIsSending(false);
       }
@@ -175,12 +230,15 @@ export function useAssistChat(mode: AssistMode = "feedback") {
       setError(null);
       setIsSubmitting(true);
       try {
-        const attachmentUrls = await uploadAssistImages(images ?? []);
-        const summary = attachmentUrls.length
-          ? `${draft.summary}\n\n---\n**Captures d'écran :**\n\n${attachmentUrls
-              .map((url, i) => `![Capture ${i + 1}](${url})`)
-              .join("\n\n")}`
-          : draft.summary;
+        const newAttachments = await uploadAssistImages(images ?? []);
+        const transcriptAttachments = messages.flatMap(
+          (message) => message.attachments ?? [],
+        );
+        const attachments = [...transcriptAttachments, ...newAttachments];
+        const summary = buildDraftSummaryWithAttachments(
+          draft.summary,
+          attachments,
+        );
 
         const { data, error: invokeError } =
           await getSupabaseClient().functions.invoke<SubmitResponse>(
@@ -196,6 +254,7 @@ export function useAssistChat(mode: AssistMode = "feedback") {
                 userAgent:
                   typeof navigator !== "undefined" ? navigator.userAgent : "",
                 transcript: messages,
+                attachments,
               },
             },
           );
