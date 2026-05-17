@@ -34,6 +34,57 @@ export interface ConfigurationContextValue {
   alloApiKey?: string;
 }
 
+const nonEmptyArrayOrDefault = <T,>(value: unknown, fallback: T[]): T[] =>
+  Array.isArray(value) && value.length > 0 ? (value as T[]) : fallback;
+
+const arrayOrDefault = <T,>(value: unknown, fallback: T[]): T[] =>
+  Array.isArray(value) ? (value as T[]) : fallback;
+
+export const mergeConfigurationWithDefaults = (
+  config?: Partial<ConfigurationContextValue> | null,
+): ConfigurationContextValue => {
+  const merged = {
+    ...defaultConfiguration,
+    ...(config ?? {}),
+  };
+
+  return {
+    ...merged,
+    companySectors: nonEmptyArrayOrDefault(
+      config?.companySectors,
+      defaultConfiguration.companySectors,
+    ),
+    companyTypes: nonEmptyArrayOrDefault(
+      config?.companyTypes,
+      defaultConfiguration.companyTypes,
+    ),
+    customViews: arrayOrDefault(
+      config?.customViews,
+      defaultConfiguration.customViews,
+    ),
+    dealCategories: nonEmptyArrayOrDefault(
+      config?.dealCategories,
+      defaultConfiguration.dealCategories,
+    ),
+    dealPipelineStatuses: arrayOrDefault(
+      config?.dealPipelineStatuses,
+      defaultConfiguration.dealPipelineStatuses,
+    ),
+    dealStages: nonEmptyArrayOrDefault(
+      config?.dealStages,
+      defaultConfiguration.dealStages,
+    ),
+    noteStatuses: nonEmptyArrayOrDefault(
+      config?.noteStatuses,
+      defaultConfiguration.noteStatuses,
+    ),
+    taskTypes: nonEmptyArrayOrDefault(
+      config?.taskTypes,
+      defaultConfiguration.taskTypes,
+    ),
+  };
+};
+
 export const useConfigurationContext = () => {
   const [config] = useStore<ConfigurationContextValue>(
     CONFIGURATION_STORE_KEY,
@@ -41,7 +92,7 @@ export const useConfigurationContext = () => {
   );
   // Merge with defaults so that missing fields in stored config
   // fall back to default values (e.g. when new settings are added)
-  return useMemo(() => ({ ...defaultConfiguration, ...config }), [config]);
+  return useMemo(() => mergeConfigurationWithDefaults(config), [config]);
 };
 
 export const useConfigurationUpdater = () => {

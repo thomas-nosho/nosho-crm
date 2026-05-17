@@ -7,7 +7,7 @@ export const getDealsByStage = (
   unorderedDeals: Deal[],
   dealStages: ConfigurationContextValue["dealStages"],
 ) => {
-  if (!dealStages) return {};
+  if (!dealStages?.length) return {};
   const dealsByStage: Record<Deal["stage"], Deal[]> = unorderedDeals.reduce(
     (acc, deal) => {
       // if deal has a stage that does not exist in configuration, assign it to the first stage
